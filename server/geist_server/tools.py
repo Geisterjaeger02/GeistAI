@@ -235,7 +235,8 @@ def html_to_blocks(html: str) -> tuple[str, list[str]]:
         doc = lxml.html.fromstring(html)
     except Exception:
         return "", []
-    title = _norm(" ".join(doc.xpath("//title//text()")))
+    heads = doc.xpath("//head/title") or doc.xpath("//title[not(ancestor::svg)]")
+    title = _norm(heads[0].text_content()) if heads else ""  # not the <title>s inside icons
     for el in doc.xpath(_DROP_XPATH):
         if el.getparent() is not None:
             el.drop_tree()
@@ -317,6 +318,7 @@ class Tools:
         self.read_pages = read_pages
         self._http = http  # injectable for tests
         self._search = search  # injectable: fn(kind, query, region) -> list[dict]
+        self.last_search_errors: list[str] = []
 
     # -- http
     def _client(self):
@@ -401,12 +403,26 @@ class Tools:
             return []
         ddg = DDGS(timeout=int(self.timeout_s))
         if kind == "news":
-            return ddg.news(query, region=region, max_results=6, timelimit="w") or []
-        try:
-            return ddg.text(query, region=region, max_results=8, backend=self.WEB_BACKENDS) or []
-        except Exception as e:  # engines change often - fall back to whatever works
-            log.info("search engines failed (%s), trying ddgs auto", e)
-            return ddg.text(query, region=region, max_results=8) or []
+            attempts = [lambda: ddg.news(query, region=region, max_results=6, timelimit="w"),
+                        lambda: ddg.news(query, region=region, max_results=6)]
+        else:
+            # engines change and rate-limit often: try the group, then each one, then anything
+            attempts = [lambda: ddg.text(query, region=region, max_results=8,
+                                         backend=self.WEB_BACKENDS)]
+            attempts += [lambda b=b: ddg.text(query, region=region, max_results=8, backend=b)
+                         for b in self.WEB_BACKENDS.split(",")]
+            attempts.append(lambda: ddg.text(query, region="wt-wt", max_results=8))
+        errors = []
+        for attempt in attempts:
+            try:
+                results = attempt()
+                if results:
+                    return results
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{type(e).__name__}: {str(e)[:120]}")
+        self.last_search_errors = errors
+        log.info("search for %r found nothing: %s", query, "; ".join(errors[-3:]))
+        return []
 
     def fetch_page(self, url: str, language: str) -> str:
         r = self._client().get(url, headers={

@@ -18,6 +18,9 @@ def main() -> None:
         (ToolCall("open_url", url="tagesschau.de"), "de", "Was sind die Schlagzeilen?"),
     ]:
         res = tools.run(call, lang, question)
+        if tools.last_search_errors:
+            res.text += "\nsearch errors: " + " / ".join(tools.last_search_errors)
+            tools.last_search_errors = []
         print(f"--- {call.tool} ({'ok' if res.ok else 'FAILED'})\n{res.text}\n")
         if os.environ.get("GITHUB_ACTIONS"):  # readable as an annotation on the run page
             body = res.text[:3000].replace("%", "%25").replace("\n", "%0A")
