@@ -27,9 +27,10 @@ tiny screen and read aloud.
 Current date and time: {now}."""
 
 INTERNET_ON = """- You can look things up online. When the user's message contains a "Live data" block, \
-it was fetched from the internet just now for this question: answer from it, round numbers \
-sensibly (whole degrees), and never invent details that are not in it. Mention the source only \
-if it helps. If the block says the lookup failed, say so briefly."""
+it was fetched from the internet just now for this question (search results and the text of \
+the best pages). Answer from it: pick the parts that answer the question, round numbers \
+sensibly (whole degrees), and never invent details that are not in it. You may name the \
+website you got it from. If the block says the lookup failed, say so briefly."""
 INTERNET_OFF = "- Be honest: you have no live internet access, so say so for news, weather or prices."
 
 
@@ -94,10 +95,10 @@ class LLMClient:
         if self.tools:
             t0 = time.perf_counter()
             call = self.route(history, text)
-            result = self.tools.run(call, language)
+            result = self.tools.run(call, language, question=text)
             if result:
                 log.info("[%s] %s %s -> %d chars in %.1fs", device, call.tool,
-                         call.query or call.location or "(home)", len(result.text),
+                         call.query or call.url or call.location or "(home)", len(result.text),
                          time.perf_counter() - t0)
                 content = (f"{text}\n\n[Live data, fetched just now for this question]\n"
                            f"{result.text}")
@@ -143,7 +144,10 @@ class LLMClient:
                     "keep_alive": cfg.llm_keep_alive,
                     "options": {"temperature": cfg.llm_temperature if temperature is None
                                 else temperature,
-                                "num_predict": max_tokens or cfg.llm_max_tokens},
+                                "num_predict": max_tokens or cfg.llm_max_tokens,
+                                # room for web pages; must stay the same for every call,
+                                # otherwise Ollama reloads the model
+                                "num_ctx": cfg.llm_context},
                 }
                 if json_schema:
                     body["format"] = json_schema

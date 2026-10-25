@@ -1,40 +1,52 @@
-"""Live information from the internet for the assistant: weather (Open-Meteo),
-web and news search (DuckDuckGo via the `ddgs` package) and Wikipedia.
+"""Live information from the internet for the assistant.
 
-None of these need an API key. Each tool returns a short plain-text block of
-facts which is handed to the language model, so the model can phrase the
-answer in the user's language.
+* weather   - Open-Meteo forecast
+* web       - searches the web (DuckDuckGo, Brave, Startpage, Yahoo, Mojeek via
+              the `ddgs` package), then opens the best pages and reads them
+* news      - latest news on a topic, plus the top articles
+* open_url  - reads a page the user names ("what's on tagesschau.de?")
+
+None of these need an API key. Each tool returns a plain-text block of facts
+which is handed to the language model, so the model can phrase the answer in
+the user's language.
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
 log = logging.getLogger("geist.tools")
 
 USER_AGENT = "GeistAI/0.2 (+https://github.com/Geisterjaeger02/GeistAI)"
-TOOL_NAMES = ("none", "weather", "web_search", "news", "wikipedia")
+TOOL_NAMES = ("none", "weather", "web", "news", "open_url")
+# older / alternative names the model might use
+TOOL_ALIASES = {"web_search": "web", "search": "web", "wikipedia": "web", "url": "open_url",
+                "browse": "open_url", "website": "open_url"}
+# pages are fetched like a normal browser would, many sites block unknown clients
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/140.0.0.0 Safari/537.36")
 
 # --------------------------------------------------------------------------- routing
-ROUTER_PROMPT = """You decide whether a voice assistant needs live data from the internet \
-to answer the user's LAST message. Today is {today}. The user's home is {home}.
+ROUTER_PROMPT = """You decide whether a voice assistant must use the internet to answer the \
+user's LAST message. Today is {today}. The user's home is {home}.
 Tools:
-- weather: current weather or forecast. "location" = the place asked about; empty if the user \
-did not name one. "when" = now | today | tomorrow | week.
-- news: recent news or headlines on a topic. "query" = short search words.
-- web_search: anything current or factual you might not know: prices, sports results, \
-opening hours, events, people in office, product releases, "who/what is ...". "query" = short \
-search words in the user's language.
-- wikipedia: background knowledge about a well-known person, place, thing or event. "query" = \
-the article title.
-- none: chit-chat, jokes, advice, maths, translations, opinions, the current date or time, \
-or anything you can answer well yourself.
-Earlier messages are only context for follow-ups like "and tomorrow?".
-Answer with JSON only, for example {{"tool": "weather", "location": "Madrid", "when": "tomorrow", \
-"query": ""}}."""
+- weather: weather now or a forecast. "location" = the place asked about, empty if the user \
+named none. "when" = now | today | tomorrow | week.
+- news: the latest news or headlines about a topic. "query" = search words.
+- web: search the internet and read the best pages. Use it for anything factual that may be \
+recent or that you are not completely sure about: prices, results, tables and rankings, \
+schedules, opening hours, events, products, people, companies, places, recipes, how-tos, \
+"who / what / when / where is ...". "query" = good search words in the user's language.
+- open_url: the user names a specific website or link. "url" = that address.
+- none: chit-chat, jokes, opinions, advice, maths, translations, the current date or time.
+When in doubt, choose web.
+Earlier messages are only context for follow-ups like "and tomorrow?" or "tell me more".
+Answer with JSON only, for example {{"tool": "web", "query": "Bundesliga Tabelle aktuell", \
+"location": "", "when": "", "url": ""}}."""
 
 ROUTER_SCHEMA = {
     "type": "object",
@@ -43,6 +55,7 @@ ROUTER_SCHEMA = {
         "location": {"type": "string"},
         "when": {"type": "string", "enum": ["now", "today", "tomorrow", "week", ""]},
         "query": {"type": "string"},
+        "url": {"type": "string"},
     },
     "required": ["tool"],
 }
@@ -54,6 +67,7 @@ class ToolCall:
     location: str = ""
     when: str = ""
     query: str = ""
+    url: str = ""
 
     @property
     def needed(self) -> bool:
@@ -72,6 +86,7 @@ def parse_tool_call(raw: str) -> ToolCall:
     if not isinstance(data, dict):
         return ToolCall()
     tool = str(data.get("tool", "none")).strip().lower()
+    tool = TOOL_ALIASES.get(tool, tool)
     if tool not in TOOL_NAMES:
         return ToolCall()
     call = ToolCall(
@@ -79,8 +94,14 @@ def parse_tool_call(raw: str) -> ToolCall:
         location=str(data.get("location") or "").strip(),
         when=str(data.get("when") or "").strip().lower(),
         query=str(data.get("query") or "").strip(),
+        url=str(data.get("url") or "").strip(),
     )
-    if call.tool in ("web_search", "news", "wikipedia") and not call.query:
+    if call.tool == "open_url" and not call.url:
+        if re.search(r"\w\.\w{2,}", call.query):  # the model put the address into "query"
+            call.url = call.query
+        else:
+            call.tool = "web"
+    if call.tool in ("web", "news") and not call.query:
         return ToolCall()
     return call
 
@@ -185,6 +206,96 @@ def format_search(query: str, results: list[dict], kind: str = "Web search") -> 
     return "\n".join(lines)
 
 
+# --------------------------------------------------------------------------- reading pages
+_BLOCK_TAGS = ("h1", "h2", "h3", "h4", "p", "li", "tr", "dt", "dd", "pre", "blockquote",
+               "figcaption", "td")
+_DROP_XPATH = ("//script|//style|//noscript|//nav|//header|//footer|//aside|//form|//svg|"
+               "//iframe|//button|//select|//template|//*[@aria-hidden='true']|"
+               "//*[contains(@class,'cookie')]|//*[contains(@id,'cookie')]|"
+               "//*[contains(@class,'consent')]")
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def html_to_blocks(html: str) -> tuple[str, list[str]]:
+    """Readable text blocks (headings, paragraphs, list items, table rows) of a page."""
+    try:
+        import lxml.html
+    except ImportError:  # crude fallback
+        title = _norm(re.sub(r"<[^>]+>", " ", (re.search(r"<title[^>]*>(.*?)</title>", html,
+                                                         re.S | re.I) or [None, ""])[1]))
+        text = re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", html)
+        text = re.sub(r"(?i)<br\s*/?>|</p>|</li>|</tr>|</h\d>|</div>", "\n", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        return title, [b for b in (_norm(x) for x in text.split("\n")) if b]
+
+    try:
+        doc = lxml.html.fromstring(html)
+    except Exception:
+        return "", []
+    title = _norm(" ".join(doc.xpath("//title//text()")))
+    for el in doc.xpath(_DROP_XPATH):
+        if el.getparent() is not None:
+            el.drop_tree()
+    roots = doc.xpath("//article") or doc.xpath("//main") or doc.xpath("//body") or [doc]
+    root = max(roots, key=lambda r: len(r.text_content()))
+    blocks, taken = [], set()
+    for el in root.iter(*_BLOCK_TAGS):
+        if any(a in taken for a in el.iterancestors()):
+            continue  # already part of a bigger block
+        if el.tag == "tr":
+            cells = [_norm(c.text_content()) for c in el.xpath("./th|./td")]
+            text = " | ".join(c for c in cells if c)
+        else:
+            text = _norm(el.text_content())
+        if text:
+            taken.add(el)
+            blocks.append(("# " + text) if el.tag in ("h1", "h2", "h3") else text)
+    if sum(len(b) for b in blocks) < 300:  # pages built from plain <div>s
+        blocks = [b for b in (_norm(x) for x in root.text_content().split("\n")) if b]
+    return title, blocks
+
+
+def _terms(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w{3,}", (text or "").lower())}
+
+
+def extract_relevant(html: str, question: str, budget: int = 1800) -> str:
+    """The parts of a page that matter for the question, in page order, within budget."""
+    title, blocks = html_to_blocks(html)
+    blocks = [b for b in blocks if len(b) >= 25 or " | " in b or b.startswith("# ")]
+    if not blocks:
+        return ""
+    terms = _terms(question)
+    scored = []
+    for i, b in enumerate(blocks):
+        overlap = len(terms & _terms(b))
+        bonus = 1.0 if i < 3 else 0.0                      # the lead usually summarises
+        bonus += 0.6 if " | " in b and overlap else 0.0    # table rows with a match
+        bonus += 0.3 if re.search(r"\d", b) else 0.0       # numbers, dates, prices
+        scored.append((overlap + bonus, i))
+    chosen, used = set(), 0
+    for score, i in sorted(scored, key=lambda x: (-x[0], x[1])):
+        text = blocks[i][:600]
+        if used + len(text) > budget:
+            continue
+        chosen.add(i)
+        used += len(text) + 1
+        if used > budget * 0.95:
+            break
+    # neighbouring table rows give context (header, positions around a match)
+    for i in sorted(chosen):
+        for j in (i - 1, i + 1):
+            if 0 <= j < len(blocks) and j not in chosen and " | " in blocks[j] and \
+                    used + len(blocks[j]) < budget * 1.2:
+                chosen.add(j)
+                used += len(blocks[j]) + 1
+    body = "\n".join(blocks[i][:600] for i in sorted(chosen))
+    return (f"{title}\n{body}" if title else body).strip()
+
+
 # --------------------------------------------------------------------------- runner
 @dataclass
 class ToolResult:
@@ -195,10 +306,17 @@ class ToolResult:
 
 
 class Tools:
-    def __init__(self, home_location: str = "", timeout_s: float = 8.0, http=None):
+    # Search engines used for "web". The ddgs default ("auto") puts Wikipedia and
+    # Grokipedia first, which makes nearly every answer an encyclopedia answer.
+    WEB_BACKENDS = "duckduckgo,brave,startpage,yahoo,mojeek"
+
+    def __init__(self, home_location: str = "", timeout_s: float = 8.0, http=None,
+                 search=None, read_pages: int = 3):
         self.home_location = home_location
         self.timeout_s = timeout_s
+        self.read_pages = read_pages
         self._http = http  # injectable for tests
+        self._search = search  # injectable: fn(kind, query, region) -> list[dict]
 
     # -- http
     def _client(self):
@@ -215,18 +333,18 @@ class Tools:
         return r.json()
 
     # -- dispatch
-    def run(self, call: ToolCall, language: str) -> ToolResult | None:
+    def run(self, call: ToolCall, language: str, question: str = "") -> ToolResult | None:
         if not call.needed:
             return None
         try:
             if call.tool == "weather":
                 return self.weather(call.location, call.when, language)
             if call.tool == "news":
-                return self.search(call.query, language, news=True)
-            if call.tool == "web_search":
-                return self.search(call.query, language)
-            if call.tool == "wikipedia":
-                return self.wikipedia(call.query, language)
+                return self.web(call.query, language, question, news=True)
+            if call.tool == "web":
+                return self.web(call.query, language, question)
+            if call.tool == "open_url":
+                return self.open_url(call.url, language, question)
         except Exception as e:  # network down, API changed ... never break the conversation
             log.warning("tool %s failed: %s", call.tool, e)
             return ToolResult(call.tool, f"The {call.tool.replace('_', ' ')} lookup failed "
@@ -272,26 +390,80 @@ class Tools:
         })
         return ToolResult("weather", format_weather(label, data, when), extra={"place": label})
 
-    # -- search
-    def search(self, query: str, language: str, news: bool = False) -> ToolResult:
-        kind = "News search" if news else "Web search"
+    # -- web
+    def _ddgs(self, kind: str, query: str, region: str) -> list[dict]:
+        if self._search:
+            return self._search(kind, query, region)
         try:
             from ddgs import DDGS
         except ImportError:
-            DDGS = None
-        if DDGS is not None:
-            region = SEARCH_REGIONS.get(language, "wt-wt")
-            ddg = DDGS()
+            log.warning("web search needs the ddgs package: pip install -r requirements.txt")
+            return []
+        ddg = DDGS(timeout=int(self.timeout_s))
+        if kind == "news":
+            return ddg.news(query, region=region, max_results=6, timelimit="w") or []
+        try:
+            return ddg.text(query, region=region, max_results=8, backend=self.WEB_BACKENDS) or []
+        except Exception as e:  # engines change often - fall back to whatever works
+            log.info("search engines failed (%s), trying ddgs auto", e)
+            return ddg.text(query, region=region, max_results=8) or []
+
+    def fetch_page(self, url: str, language: str) -> str:
+        r = self._client().get(url, headers={
+            "User-Agent": BROWSER_UA,
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": f"{language or 'en'},en;q=0.7",
+        })
+        r.raise_for_status()
+        ctype = r.headers.get("content-type", "text/html")
+        if "html" not in ctype and "text" not in ctype:
+            return ""
+        return r.text[:2_000_000]
+
+    def _read(self, urls: list[str], language: str, question: str, budget: int) -> list[tuple]:
+        def one(url):
+            try:
+                text = extract_relevant(self.fetch_page(url, language), question, budget)
+                return url, text
+            except Exception as e:
+                log.info("could not read %s: %s", url, e)
+                return url, ""
+
+        with ThreadPoolExecutor(max_workers=max(1, len(urls))) as pool:
+            return [(u, t) for u, t in pool.map(one, urls) if len(t) > 80]
+
+    def web(self, query: str, language: str, question: str = "", news: bool = False) -> ToolResult:
+        tool = "news" if news else "web"
+        region = SEARCH_REGIONS.get(language, "wt-wt")
+        results = self._ddgs("news" if news else "text", query, region)
+        if not results:
             if news:
-                results = ddg.news(query, region=region, max_results=5, timelimit="w")
-            else:
-                results = ddg.text(query, region=region, max_results=5)
-            if results or news:
-                return ToolResult("news" if news else "web_search",
-                                  format_search(query, results or [], kind))
-        else:
-            log.info("ddgs not installed (pip install ddgs) - using Wikipedia instead")
-        return self.wikipedia(query, language)
+                return ToolResult(tool, f"The news search for '{query}' found nothing.", ok=False)
+            return self.wikipedia(query, language)
+        urls = []
+        for r in results:
+            url = r.get("href") or r.get("url") or ""
+            if url.startswith("http") and not re.search(r"\.(pdf|jpe?g|png|mp4)(\?|$)|youtube\.com|"
+                                                        r"youtu\.be", url, re.I):
+                if _domain(url) not in {_domain(u) for u in urls}:  # different sites
+                    urls.append(url)
+            if len(urls) >= self.read_pages:
+                break
+        pages = self._read(urls, language, f"{question} {query}", budget=1800)
+        parts = [format_search(query, results, "News search" if news else "Web search")]
+        for url, text in pages:
+            parts.append(f"--- Page {_domain(url)} ({url}):\n{text}")
+        log.info("web: %d results, read %d of %d pages", len(results), len(pages), len(urls))
+        return ToolResult(tool, "\n\n".join(parts), extra={"pages": [u for u, _ in pages]})
+
+    def open_url(self, url: str, language: str, question: str = "") -> ToolResult:
+        url = url.strip().strip("<>\"'")
+        if not re.match(r"https?://", url):
+            url = "https://" + url
+        text = extract_relevant(self.fetch_page(url, language), question, budget=3500)
+        if not text:
+            return ToolResult("open_url", f"The page {url} could not be read.", ok=False)
+        return ToolResult("open_url", f"--- Page {_domain(url)} ({url}):\n{text}")
 
     # -- wikipedia
     def wikipedia(self, query: str, language: str) -> ToolResult:

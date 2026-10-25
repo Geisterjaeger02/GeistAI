@@ -78,6 +78,7 @@ class Config:
     llm_temperature: float = 0.6
     llm_max_tokens: int = 220
     llm_keep_alive: str = "2h"         # how long Ollama keeps the model in memory
+    llm_context: int = 8192            # tokens; web pages need room
     history_turns: int = 6
     assistant_name: str = "GeistAI"
     timezone: str = "Europe/Berlin"
@@ -115,6 +116,7 @@ class Config:
         cfg.llm_temperature = _env_float("LLM_TEMPERATURE", cfg.llm_temperature)
         cfg.llm_max_tokens = _env_int("LLM_MAX_TOKENS", cfg.llm_max_tokens)
         cfg.llm_keep_alive = _env("LLM_KEEP_ALIVE", cfg.llm_keep_alive)
+        cfg.llm_context = _env_int("LLM_CONTEXT", cfg.llm_context)
         cfg.history_turns = _env_int("HISTORY_TURNS", cfg.history_turns)
         cfg.assistant_name = _env("ASSISTANT_NAME", cfg.assistant_name)
         cfg.timezone = _env("GEIST_TIMEZONE", cfg.timezone)
