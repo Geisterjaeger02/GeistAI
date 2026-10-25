@@ -26,7 +26,14 @@ jobs:
       - name: Use example secrets
         run: cp firmware/include/secrets.example.h firmware/include/secrets.h
       - name: Build
-        run: pio run -d firmware -e ${{ matrix.env }}
+        shell: bash
+        run: |
+          set +e
+          pio run -d firmware -e ${{ matrix.env }} 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          # surface compiler errors as annotations (readable without the raw log)
+          grep -E "error:|Error [0-9]|undefined reference|fatal" build.log | head -40 | sed 's/^/::error::/'
+          exit $status
       - uses: actions/upload-artifact@v4
         with:
           name: geistai-${{ matrix.env }}
