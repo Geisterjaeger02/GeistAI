@@ -2,6 +2,8 @@
 
     cd server && python -m tests.live_check
 """
+import os
+
 from geist_server.tools import ToolCall, Tools
 
 
@@ -16,6 +18,9 @@ def main() -> None:
     ]:
         res = tools.run(call, lang)
         print(f"--- {call.tool} ({'ok' if res.ok else 'FAILED'})\n{res.text}\n")
+        if os.environ.get("GITHUB_ACTIONS"):  # readable as an annotation on the run page
+            body = res.text[:900].replace("%", "%25").replace("\n", "%0A")
+            print(f"::notice title={call.tool} {lang} {'ok' if res.ok else 'FAILED'}::{body}")
 
 
 if __name__ == "__main__":
