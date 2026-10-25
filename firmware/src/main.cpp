@@ -123,6 +123,8 @@ static std::string serverErrorText() {
   t += " \xC2\xB7 " + net::serverHost();
   std::string d = net::lastErrorDetail();
   if (!d.empty()) t += " \xC2\xB7 " + d;
+  // our own address: the first three numbers must match the PC's
+  if (net::wifiConnected()) t += std::string("\nT-Embed: ") + WiFi.localIP().toString().c_str();
   return t;
 }
 

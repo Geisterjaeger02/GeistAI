@@ -99,11 +99,36 @@ std::string serverHost() {
 }
 const std::string& serverUrl() { return g_server; }
 
+// Accepts "192.168.1.5", "192.168.1.5:8765", "http://192.168.1.5:8765/" ... and
+// turns it into "http://192.168.1.5:8765".
+static std::string normalizeUrl(std::string u) {
+  std::string t;
+  for (char ch : u)
+    if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') t += ch;
+  while (!t.empty() && t.back() == '/') t.pop_back();
+  if (t.empty()) return t;
+  if (t.rfind("http://", 0) != 0 && t.rfind("https://", 0) != 0) {
+    size_t p = t.find("://");
+    if (p != std::string::npos) t = t.substr(p + 3);   // e.g. "htp://"
+    else if (t.rfind("http//", 0) == 0) t = t.substr(6);
+    t = "http://" + t;
+  }
+  size_t hostStart = t.find("://") + 3;
+  size_t slash = t.find('/', hostStart);
+  std::string host = t.substr(hostStart, slash == std::string::npos ? std::string::npos : slash - hostStart);
+  if (host.find(':') == std::string::npos) {
+    std::string port = ":" + std::to_string(SERVER_DEFAULT_PORT);
+    if (slash == std::string::npos) t += port;
+    else t.insert(slash, port);
+  }
+  return t;
+}
+
 bool findServer() {
   const char* configured = GEIST_SERVER_URL;
   if (configured && configured[0]) {
-    g_server = configured;
-    while (!g_server.empty() && g_server.back() == '/') g_server.pop_back();
+    g_server = normalizeUrl(configured);
+    Serial.printf("[net] server from secrets.h: %s\n", g_server.c_str());
     return healthCheck();
   }
 
@@ -125,7 +150,11 @@ bool healthCheck() {
   if (g_server.empty() || !wifiConnected()) return false;
   HTTPClient http;
   http.setTimeout(3000);
-  if (!http.begin((g_server + "/health").c_str())) return false;
+  if (!http.begin((g_server + "/health").c_str())) {
+    g_lastError = "invalid address";
+    Serial.printf("[net] invalid server address: %s\n", g_server.c_str());
+    return false;
+  }
   int code = http.GET();
   http.end();
   if (code != 200)
