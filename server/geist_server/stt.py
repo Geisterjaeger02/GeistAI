@@ -35,20 +35,46 @@ class WhisperSTT:
                                        compute_type=self.cfg.whisper_compute)
         return self._model
 
-    def warmup(self) -> None:
-        self._load()
+    @staticmethod
+    def _is_gpu_problem(e: Exception) -> bool:
+        msg = str(e).lower()
+        return any(k in msg for k in ("cublas", "cudnn", "cuda", "cudart", "nvrtc"))
 
-    def _run(self, model, audio: np.ndarray, language: str | None):
-        segments, info = model.transcribe(audio, language=language, beam_size=5,
-                                          vad_filter=True, condition_on_previous_text=False)
+    def _fall_back_to_cpu(self, e: Exception) -> None:
+        """An NVIDIA GPU was detected but its CUDA libraries are missing - use the CPU."""
+        from faster_whisper import WhisperModel
+
+        log.warning("GPU speech recognition not available (%s). Using the CPU instead - "
+                    "set WHISPER_DEVICE=cpu in .env to skip this check.", e)
+        self.cfg.whisper_device, self.cfg.whisper_compute = "cpu", "int8"
+        self._model = WhisperModel(self.cfg.whisper_model, device="cpu", compute_type="int8")
+
+    def _run_once(self, audio: np.ndarray, language: str | None, vad: bool = True):
+        segments, info = self._load().transcribe(audio, language=language, beam_size=5,
+                                                 vad_filter=vad,
+                                                 condition_on_previous_text=False)
         text = "".join(s.text for s in segments).strip()
         return text, info
+
+    def _run(self, audio: np.ndarray, language: str | None, vad: bool = True):
+        try:
+            return self._run_once(audio, language, vad)
+        except (RuntimeError, OSError) as e:
+            if self.cfg.whisper_device == "cpu" or not self._is_gpu_problem(e):
+                raise
+            self._fall_back_to_cpu(e)
+            return self._run_once(audio, language, vad)
+
+    def warmup(self) -> None:
+        """Load the model and run one tiny transcription, which also checks the GPU."""
+        with self._lock:
+            noise = (np.random.default_rng(0).standard_normal(16000) * 0.01).astype(np.float32)
+            self._run(noise, "en", vad=False)
 
     def transcribe(self, audio: np.ndarray, language: str | None = None) -> Transcript:
         """language=None means auto-detect."""
         with self._lock:  # one model, one job at a time
-            model = self._load()
-            text, info = self._run(model, audio, language)
+            text, info = self._run(audio, language)
             detected = info.language
             prob = float(getattr(info, "language_probability", 0.0) or 0.0)
 
@@ -59,6 +85,6 @@ class WhisperSTT:
                 best = next((lang for lang, _ in probs if lang in allowed), None)
                 if best:
                     log.info("detected '%s' not allowed, retrying as '%s'", detected, best)
-                    text, info = self._run(model, audio, best)
+                    text, info = self._run(audio, best)
                     detected, prob = best, float(dict(probs).get(best, 0.0))
         return Transcript(text=text, language=detected, probability=prob)
