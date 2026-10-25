@@ -33,7 +33,7 @@ Raspberry Pi 5, NAS or home server) is the "brain". The two find each other auto
 
 ### 1. Server (on your PC)
 
-You need Python 3.10+ and [Ollama](https://ollama.com).
+You need Python 3.10–3.13 (64-bit) and [Ollama](https://ollama.com). The speech engine (ctranslate2) has no packages for brand-new Python releases or for Windows on ARM yet; on Windows: `py install 3.13`, then `py -3.13 -m venv .venv`.
 
 ```bash
 ollama pull gemma3:4b                 # any multilingual chat model works
