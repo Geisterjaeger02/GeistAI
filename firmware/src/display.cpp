@@ -142,6 +142,11 @@ void present() {
 
 void setBrightness(uint8_t level) { lcd.setBrightness(level); }
 
+void sleep() {
+  lcd.setBrightness(0);
+  lcd.sleep();
+}
+
 void status(const char* msg) {
   Serial.printf("[boot] %s\n", msg);
   lcd.fillRect(0, 140, geist::SCREEN_W, 30, 0x0000);

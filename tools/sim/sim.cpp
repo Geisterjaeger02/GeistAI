@@ -99,6 +99,12 @@ int main(int argc, char** argv) {
   m.settingsIndex = 2; m.settingsEditing = true;
   shot("09_settings");
 
+  // Power button held
+  m.mode = Mode::Idle; m.settingsEditing = false; m.powerHold = 0.6f;
+  shot("10_power_hold");
+  m.powerHold = 0.f; m.mode = Mode::Off;
+  shot("11_goodbye");
+
   printf("ok\n");
   return 0;
 }

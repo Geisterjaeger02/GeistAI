@@ -15,6 +15,9 @@ void present();
 
 void setBrightness(uint8_t level);
 
+// Backlight off + panel sleep (used when switching off).
+void sleep();
+
 // Startup diagnostics: prints a line at the bottom of the screen (and to Serial)
 // before the real UI takes over.
 void status(const char* msg);

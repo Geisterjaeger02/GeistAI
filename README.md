@@ -76,6 +76,7 @@ Leave `GEIST_SERVER_URL` empty to find the server automatically, or set it to
 | **Turn** the knob              | Scroll the conversation / change a setting          |
 | Tap while it's speaking        | Stop the voice and talk again                       |
 | Back button (CC1101 only)      | Open or close settings                              |
+| **Hold** back button 3 s       | Switch off (hold it ~1 s to switch back on)         |
 
 **Settings:** speech language (Auto or fixed), menu language, volume, voice replies on/off,
 clear chat, device info (IP address).

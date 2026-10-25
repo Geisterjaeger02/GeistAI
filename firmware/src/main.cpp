@@ -27,6 +27,7 @@
 #include "input.h"
 #include "leds.h"
 #include "net.h"
+#include "power.h"
 #include "ui.h"
 
 using namespace geist;
@@ -436,6 +437,7 @@ static void settingsClick() {
 //  Input handling
 // ----------------------------------------------------------------------------
 static bool pressStartedTurn = false;
+static uint32_t backDownAt = 0;  // back/power button press time, 0 = not pressed
 static bool ignoreNextUp = false;
 static uint32_t lastTurnPressMs = 0;
 
@@ -452,6 +454,7 @@ static void onButtonDown(const input::Event& ev) {
   Mode m = currentMode();
   switch (m) {
     case Mode::Boot:
+    case Mode::Off:
       return;
     case Mode::Settings:
       return;  // handled on release
@@ -535,12 +538,23 @@ static void handleInput() {
       case input::EventType::Rotate:
         onRotate(ev.delta);
         break;
-      case input::EventType::Back:
+      case input::EventType::BackDown:
+        backDownAt = ev.atMs;
+        break;
+      case input::EventType::BackUp: {
+        bool wasPressed = backDownAt != 0;  // ignore the release after waking up
+        backDownAt = 0;
+        {
+          ModelLock l;
+          model.powerHold = 0.f;
+        }
+        if (!wasPressed || ev.heldMs >= POWER_HOLD_SHOW_MS) break;  // long hold cancelled
         if (currentMode() == Mode::Settings)
           closeSettings();
         else if (currentMode() != Mode::Boot)
           openSettings();
         break;
+      }
       default:
         break;
     }
@@ -648,6 +662,7 @@ static void bootSequence() {
 }
 
 void setup() {
+  power::handleWakeUp();  // goes back to sleep if the button was only bumped
   pinMode(PIN_POWER_ON, OUTPUT);
   digitalWrite(PIN_POWER_ON, HIGH);
   Serial.begin(115200);
@@ -697,11 +712,40 @@ void setup() {
   bootSequence();
 }
 
+// Back button held: show a filling ring, switch off after POWER_HOLD_OFF_MS.
+static void updatePowerHold(uint32_t now) {
+  if (!backDownAt || !input::backIsDown()) return;
+  uint32_t held = now - backDownAt;
+  float progress = held < POWER_HOLD_SHOW_MS
+                       ? 0.f
+                       : (float)(held - POWER_HOLD_SHOW_MS) / (POWER_HOLD_OFF_MS - POWER_HOLD_SHOW_MS);
+  if (progress > 0.f && progress < 0.01f) progress = 0.01f;
+  {
+    ModelLock l;
+    model.powerHold = progress > 1.f ? 1.f : progress;
+  }
+  if (held < POWER_HOLD_OFF_MS) return;
+
+  Serial.println("[power] switching off");
+  cancelTurn();
+  playStop = true;
+  {
+    ModelLock l;
+    model.powerHold = 0.f;
+    setModeLocked(Mode::Off);
+  }
+  drawFrame();
+  leds::update(Mode::Off, 0, now + 1000);
+  delay(1500);  // let the goodbye screen be seen
+  power::switchOff();
+}
+
 void loop() {
   static uint32_t lastFrame = 0, lastPoll = 0;
   uint32_t now = millis();
 
   handleInput();
+  updatePowerHold(now);
 
   // Leave the error message after a few seconds.
   {

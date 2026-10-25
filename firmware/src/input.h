@@ -5,12 +5,12 @@
 
 namespace input {
 
-enum class EventType : uint8_t { None, Down, Up, Rotate, Back };
+enum class EventType : uint8_t { None, Down, Up, Rotate, BackDown, BackUp };
 
 struct Event {
   EventType type = EventType::None;
   int delta = 0;         // Rotate: detents (+ = clockwise)
-  uint32_t heldMs = 0;   // Up: how long the button was held
+  uint32_t heldMs = 0;   // Up / BackUp: how long the button was held
   uint32_t atMs = 0;
 };
 
@@ -20,5 +20,6 @@ void begin();
 bool poll(Event& ev);
 
 bool buttonIsDown();
+bool backIsDown();
 
 }  // namespace input

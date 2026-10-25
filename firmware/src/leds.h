@@ -9,5 +9,6 @@ namespace leds {
 void begin();
 // Call every frame; level is the mic or speaker loudness 0..1.
 void update(geist::Mode mode, float level, uint32_t nowMs);
+void off();
 
 }  // namespace leds

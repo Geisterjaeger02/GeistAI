@@ -24,6 +24,15 @@
 #define ENCODER_REVERSE 0          // flip if scrolling feels backwards
 #define SCROLL_STEP_PX 18
 
+// ---------------------------------------------------------------- power (back button)
+#define POWER_HOLD_SHOW_MS 600     // ring appears after holding this long
+#define POWER_HOLD_OFF_MS 3000     // switch off after holding this long
+#define POWER_WAKE_HOLD_MS 800     // hold this long to switch back on
+// 0 = deep sleep (wake with the back button, works on USB too)
+// 1 = cut the battery via the BQ25896 charger ("ship mode"); battery only, and the
+//     T-Embed then only turns on again via its charger button or by plugging in USB
+#define POWER_OFF_SHIP_MODE 0
+
 // ---------------------------------------------------------------- network
 #define HTTP_TIMEOUT_MS 60000      // the LLM may take a while on slow machines
 #define WIFI_CONNECT_TIMEOUT_MS 20000

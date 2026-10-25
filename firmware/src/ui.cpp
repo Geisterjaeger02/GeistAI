@@ -392,6 +392,33 @@ void drawSettings(Canvas& c, const UiModel& m) {
   }
 }
 
+// ------------------------------------------------------------ power
+void drawPowerIcon(Canvas& c, float cx, float cy, float r, uint16_t col, uint8_t a) {
+  // the classic power symbol: a ring open at the top plus a vertical bar
+  const float gap = 0.7f;
+  float a0 = -1.5708f + gap;
+  c.arc(cx, cy, r, 2.6f, a0, a0 + 6.2832f - 2.f * gap, col, a);
+  c.fillRoundRect((int)(cx - 1.5f), (int)(cy - r - 2), 3, (int)(r + 1), 1, col, a);
+}
+
+void drawPowerHold(Canvas& c, const UiModel& m) {
+  float p = clamp01(m.powerHold);
+  c.blendRect(0, 0, SCREEN_W, SCREEN_H, BG_TOP, 238);
+  float cx = SCREEN_W / 2.f, cy = 70.f;
+  c.ring(cx, cy, 34.f, 6.f, INK, 40);
+  c.arc(cx, cy, 34.f, 6.f, -1.5708f, -1.5708f + 6.2832f * p, INK, 255);
+  drawPowerIcon(c, cx, cy, 13.f, INK, 255);
+  c.drawTextCentered(font_body, SCREEN_W / 2, 118, tr(m.uiLang, S_HOLD_TO_POWER_OFF), INK);
+}
+
+void drawOff(Canvas& c, const UiModel& m) {
+  drawBackground(c);
+  int lx = (SCREEN_W - logo_mid_w) / 2;
+  c.drawMask8(lx, 22, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, 200);
+  c.drawMask8(lx, 22, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
+  c.drawTextCentered(font_title, SCREEN_W / 2, 22 + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
+}
+
 }  // namespace
 
 // ------------------------------------------------------------ public
@@ -413,6 +440,10 @@ void render(Canvas& c, const UiModel& m) {
       return;
     case Mode::Settings:
       drawSettings(c, m);
+      if (m.powerHold > 0.f) drawPowerHold(c, m);
+      return;
+    case Mode::Off:
+      drawOff(c, m);
       return;
     default:
       break;
@@ -427,6 +458,7 @@ void render(Canvas& c, const UiModel& m) {
   }
   if (m.mode == Mode::Listening) drawListeningOverlay(c, m);
   drawBottomBar(c, m);
+  if (m.powerHold > 0.f) drawPowerHold(c, m);
 }
 
 }  // namespace geist

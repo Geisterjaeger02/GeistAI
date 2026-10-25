@@ -16,6 +16,7 @@ namespace {
 RotaryEncoder* encoder = nullptr;
 QueueHandle_t events = nullptr;
 volatile bool btnDown = false;
+volatile bool backDown = false;
 
 void scanTask(void*) {
   bool stable = digitalRead(PIN_ENC_BTN) == LOW;
@@ -23,7 +24,8 @@ void scanTask(void*) {
   uint32_t changedAt = millis();
   uint32_t downAt = 0;
 #if PIN_BTN_BACK >= 0
-  bool backLast = false;
+  bool backStable = digitalRead(PIN_BTN_BACK) == LOW, backLast = backStable;
+  uint32_t backChangedAt = millis(), backDownAt = millis();
 #endif
   long lastPos = 0;
 
@@ -65,13 +67,23 @@ void scanTask(void*) {
 
 #if PIN_BTN_BACK >= 0
     bool back = digitalRead(PIN_BTN_BACK) == LOW;
-    if (back && !backLast) {
+    if (back != backLast) {
+      backLast = back;
+      backChangedAt = now;
+    } else if (back != backStable && now - backChangedAt >= 20) {
+      backStable = back;
+      backDown = back;
       Event ev;
-      ev.type = EventType::Back;
       ev.atMs = now;
+      if (back) {
+        backDownAt = now;
+        ev.type = EventType::BackDown;
+      } else {
+        ev.type = EventType::BackUp;
+        ev.heldMs = now - backDownAt;
+      }
       xQueueSend(events, &ev, 0);
     }
-    backLast = back;
 #endif
 
     vTaskDelay(1);
@@ -93,6 +105,7 @@ void begin() {
 }
 
 bool buttonIsDown() { return btnDown; }
+bool backIsDown() { return backDown; }
 
 bool poll(Event& ev) {
   if (!events) return false;

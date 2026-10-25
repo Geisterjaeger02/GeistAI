@@ -93,12 +93,20 @@ void update(geist::Mode mode, float level, uint32_t now) {
       for (auto& p : px) p = scale(C_CYAN, b);
       break;
     }
+    case geist::Mode::Off:
+      for (auto& p : px) p = RGB{0, 0, 0};
+      break;
     case geist::Mode::Error: {
       float b = (fmodf(t, 1.f) < 0.5f) ? 0.5f : 0.05f;
       for (auto& p : px) p = scale(C_RED, b);
       break;
     }
   }
+  show();
+}
+
+void off() {
+  for (auto& p : px) p = RGB{0, 0, 0};
   show();
 }
 

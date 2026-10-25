@@ -37,6 +37,8 @@ enum Str : uint8_t {
   S_ERR_GENERIC,
   S_DONE,
   S_DEVICE_INFO,
+  S_HOLD_TO_POWER_OFF,
+  S_GOODBYE,
   S_COUNT
 };
 
@@ -47,7 +49,7 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Looking for server…", "Starting…", "Ready", "Hi! Hold the knob and just talk to me.",
      "Settings", "Speech language", "Menu language", "Volume", "Voice replies", "Clear chat",
      "Back", "On", "Off", "Auto", "No Wi-Fi connection", "Server not reachable",
-     "I didn't hear anything", "Something went wrong", "Done", "Device info"},
+     "I didn't hear anything", "Something went wrong", "Done", "Device info", "Keep holding to turn off", "See you soon!"},
     // Deutsch
     {"Halten oder tippen zum Sprechen", "Doppelklick: Einstellungen", "Ich höre zu…",
      "Loslassen zum Senden", "Tippen zum Senden", "Denke nach…", "Spreche…",
@@ -55,7 +57,7 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Hallo! Halte den Knopf gedrückt und sprich einfach mit mir.", "Einstellungen",
      "Sprache (Sprechen)", "Menüsprache", "Lautstärke", "Sprachantwort", "Chat löschen",
      "Zurück", "An", "Aus", "Auto", "Kein WLAN", "Server nicht erreichbar",
-     "Ich habe nichts gehört", "Etwas ist schiefgelaufen", "Fertig", "Geräteinfo"},
+     "Ich habe nichts gehört", "Etwas ist schiefgelaufen", "Fertig", "Geräteinfo", "Halten zum Ausschalten", "Bis bald!"},
     // Español
     {"Mantén o toca para hablar", "Doble clic: ajustes", "Escuchando…", "Suelta para enviar",
      "Toca para enviar", "Pensando…", "Hablando…", "Clic para parar", "Conectando al Wi-Fi…",
@@ -63,7 +65,7 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "¡Hola! Mantén pulsado el botón y háblame.", "Ajustes", "Idioma de voz",
      "Idioma del menú", "Volumen", "Respuesta por voz", "Borrar chat", "Atrás", "Sí", "No",
      "Auto", "Sin Wi-Fi", "Servidor no disponible", "No he oído nada", "Algo salió mal",
-     "Hecho", "Info del dispositivo"},
+     "Hecho", "Info del dispositivo", "Mantén para apagar", "¡Hasta pronto!"},
     // Français
     {"Maintiens ou touche pour parler", "Double-clic : réglages", "J'écoute…",
      "Relâche pour envoyer", "Touche pour envoyer", "Je réfléchis…", "Je parle…",
@@ -71,7 +73,7 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Salut ! Maintiens le bouton et parle-moi.", "Réglages", "Langue parlée",
      "Langue du menu", "Volume", "Réponse vocale", "Effacer le chat", "Retour", "Oui", "Non",
      "Auto", "Pas de Wi-Fi", "Serveur injoignable", "Je n'ai rien entendu",
-     "Une erreur est survenue", "Terminé", "Infos appareil"},
+     "Une erreur est survenue", "Terminé", "Infos appareil", "Maintiens pour éteindre", "À bientôt !"},
 };
 
 static const char* const kUiLangNames[UI_LANG_COUNT] = {"English", "Deutsch", "Español",
