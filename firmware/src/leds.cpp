@@ -68,7 +68,8 @@ void update(geist::Mode mode, float level, uint32_t now) {
   float t = now / 1000.f;
 
   switch (mode) {
-    case geist::Mode::Boot: {
+    case geist::Mode::Boot:
+    case geist::Mode::Setup: {
       // a comet that circles the ring
       float head = fmodf(t * 1.6f, 1.f) * LED_COUNT;
       for (int i = 0; i < LED_COUNT; i++) {

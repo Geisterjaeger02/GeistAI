@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeistAI Flasher</title>
+<meta name="description" content="Install GeistAI on a LilyGO T-Embed, M5Stack Cardputer or StickC Plus2 straight from your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+  :root {
+    --cyan-top: #28f6ff;
+    --cyan-bottom: #00cef0;
+    --ink: #001824;
+    --ink-soft: #00566c;
+    --snow: #ffffff;
+    --glow: #96faff;
+    --red: #c40046;
+    --radius-screen: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--cyan-bottom); }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--cyan-top) 0%, var(--cyan-bottom) 70%) fixed;
+  }
+  a { color: var(--ink); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible, input:focus-visible + label {
+    outline: 3px solid var(--ink); outline-offset: 3px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+
+  /* top line */
+  .top { display: flex; justify-content: flex-end; gap: 4px; padding-top: 16px; }
+  .lang button {
+    font: 600 14px Inter, sans-serif; color: var(--ink); background: transparent;
+    border: 0; padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  }
+  .lang button[aria-pressed="true"] { background: var(--ink); color: var(--glow); }
+
+  /* hero: the same moment as the device's boot screen */
+  .hero { text-align: center; padding: 40px 0 28px; }
+  .logo {
+    font-family: "Dancing Script", cursive; font-weight: 700;
+    font-size: clamp(72px, 17vw, 132px); line-height: 1; margin: 0;
+    text-shadow: 0 0 22px rgba(255, 255, 255, .85);
+    clip-path: inset(0 100% 0 0);
+    animation: write 1.6s cubic-bezier(.6, .1, .3, 1) .15s forwards;
+  }
+  @keyframes write { to { clip-path: inset(0 -10% 0 0); } }
+  @media (prefers-reduced-motion: reduce) { .logo { animation: none; clip-path: none; } }
+  .hero p { font-size: 19px; margin: 14px auto 0; max-width: 32em; color: var(--ink-soft); }
+
+  h2 { font-size: 22px; line-height: 1.25; margin: 0 0 14px; font-weight: 700; }
+  section { padding: 28px 0; }
+
+  /* device picker: each option is drawn as its screen */
+  .devices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .device input { position: absolute; opacity: 0; pointer-events: none; }
+  .device label { display: block; cursor: pointer; }
+  .screen {
+    position: relative; display: grid; place-items: center;
+    background: linear-gradient(180deg, var(--cyan-top), var(--cyan-bottom));
+    border: 7px solid var(--ink); border-radius: var(--radius-screen);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    transition: box-shadow .2s, transform .2s;
+  }
+  .frame { aspect-ratio: 320 / 170; display: flex; align-items: flex-end; justify-content: center; }
+  .screen.wide { aspect-ratio: 320 / 170; width: 100%; }
+  .screen.small { aspect-ratio: 240 / 135; width: 80%; }
+  .screen span {
+    font-family: "Dancing Script", cursive; font-weight: 700; font-size: 26px;
+    color: var(--ink); opacity: .35; transition: opacity .2s;
+  }
+  .device input:checked + label .screen {
+    box-shadow: 0 0 0 4px var(--snow), 0 0 28px 6px rgba(255, 255, 255, .7);
+    transform: translateY(-2px);
+  }
+  .device input:checked + label .screen span { opacity: 1; }
+  .device input:focus-visible + label .screen { outline: 3px solid var(--ink); outline-offset: 6px; }
+  .name { display: block; font-weight: 600; margin-top: 12px; line-height: 1.3; }
+  .note { display: block; font-size: 14px; color: var(--ink-soft); line-height: 1.4; margin-top: 3px; }
+
+  /* install */
+  .install {
+    margin-top: 26px; padding: 22px; border-radius: 22px;
+    background: rgba(255, 255, 255, .55);
+  }
+  .install-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+  .go {
+    font: 600 18px Inter, sans-serif; color: var(--glow); background: var(--ink);
+    border: 0; border-radius: 999px; padding: 15px 26px; cursor: pointer;
+  }
+  .go:hover { box-shadow: 0 0 0 4px rgba(0, 24, 36, .18); }
+  .tip { margin: 0; font-size: 15px; color: var(--ink-soft); flex: 1 1 260px; }
+  .warn { display: block; color: var(--red); font-weight: 600; }
+  esp-web-install-button:not(:defined) .warn { display: none; }
+
+  /* steps */
+  ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding: 12px 0; }
+  ol.steps li::before {
+    content: counter(s); width: 36px; height: 36px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; color: var(--glow); background: var(--ink);
+  }
+  ol.steps strong { display: block; }
+  ol.steps p { margin: 2px 0 0; color: var(--ink-soft); }
+  code { font-size: 15px; background: rgba(255, 255, 255, .6); padding: 1px 6px; border-radius: 6px; }
+
+  .preview img { width: 100%; height: auto; border-radius: 14px; display: block; }
+  .preview figcaption { font-size: 14px; color: var(--ink-soft); margin-top: 8px; }
+
+  footer { padding: 30px 0 46px; font-size: 15px; color: var(--ink-soft); }
+
+  html:not([lang="de"]) [data-lang="de"], html[lang="de"] [data-lang="en"] { display: none !important; }
+
+  @media (max-width: 680px) {
+    .devices { grid-template-columns: repeat(2, 1fr); }
+    .hero { padding-top: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top lang" role="group" aria-label="Language">
+    <button type="button" data-set-lang="en" aria-pressed="true">English</button>
+    <button type="button" data-set-lang="de" aria-pressed="false">Deutsch</button>
+  </div>
+
+  <header class="hero">
+    <h1 class="logo">GeistAI</h1>
+    <p data-lang="en">A voice assistant that lives on your own network. Install it on your device right here in the browser.</p>
+    <p data-lang="de">Ein Sprachassistent, der in deinem eigenen Netzwerk lebt. Installiere ihn direkt hier im Browser auf dein Gerät.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="pick">
+      <h2 id="pick"><span data-lang="en">Choose your device</span><span data-lang="de">Wähle dein Gerät</span></h2>
+      <div class="devices" id="devices"></div>
+
+      <div class="install">
+        <div class="install-row">
+          <esp-web-install-button id="installer" manifest="manifests/tembed_cc1101.json">
+            <button slot="activate" class="go" id="go">Install</button>
+            <span slot="unsupported" class="warn">
+              <span data-lang="en">Your browser can't talk to USB devices. Open this page in Chrome or Edge on a computer.</span>
+              <span data-lang="de">Dein Browser kann nicht mit USB-Geräten sprechen. Öffne die Seite in Chrome oder Edge am Computer.</span>
+            </span>
+            <span slot="not-allowed" class="warn">
+              <span data-lang="en">Installing only works over https.</span>
+              <span data-lang="de">Installieren geht nur über https.</span>
+            </span>
+          </esp-web-install-button>
+          <p class="tip" id="tip"></p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="how">
+      <h2 id="how"><span data-lang="en">How it works</span><span data-lang="de">So geht's</span></h2>
+      <ol class="steps">
+        <li><div>
+          <strong data-lang="en">Plug the device into this computer</strong>
+          <strong data-lang="de">Gerät an diesen Computer anschließen</strong>
+          <p data-lang="en">Use a USB-C cable that carries data, not a charge-only one.</p>
+          <p data-lang="de">Nimm ein USB-C-Kabel, das Daten überträgt, kein reines Ladekabel.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Click Install and pick the port</strong>
+          <strong data-lang="de">Auf Installieren klicken und den Port wählen</strong>
+          <p data-lang="en">The browser lists the device as a USB serial port. Installing takes about a minute.</p>
+          <p data-lang="de">Der Browser zeigt das Gerät als USB-Serial-Port. Das Installieren dauert etwa eine Minute.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Enter your Wi-Fi</strong>
+          <strong data-lang="de">WLAN eingeben</strong>
+          <p data-lang="en">Right after installing, the browser asks for your Wi-Fi name and password and sends them to the device over USB. Skipped it? The device opens its own hotspot and shows a QR code you can scan with your phone.</p>
+          <p data-lang="de">Direkt nach dem Installieren fragt der Browser nach WLAN-Name und Passwort und schickt sie per USB ans Gerät. Übersprungen? Dann öffnet das Gerät einen eigenen Hotspot und zeigt einen QR-Code zum Scannen mit dem Handy.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Start the GeistAI server on your PC</strong>
+          <strong data-lang="de">GeistAI-Server auf dem PC starten</strong>
+          <p data-lang="en">Speech recognition, the language model and the voice run on your own computer. The device finds the server by itself. <a href="https://github.com/Geisterjaeger02/GeistAI#2-start-the-server">Server setup guide</a></p>
+          <p data-lang="de">Spracherkennung, Sprachmodell und Stimme laufen auf deinem eigenen Computer. Das Gerät findet den Server von selbst. <a href="https://github.com/Geisterjaeger02/GeistAI#2-start-the-server">Anleitung für den Server</a></p>
+        </div></li>
+      </ol>
+      <p data-lang="en">Already running GeistAI? Connect it and click Install to change its Wi-Fi or update it.</p>
+      <p data-lang="de">GeistAI läuft schon? Anschließen und auf Installieren klicken, um das WLAN zu ändern oder zu aktualisieren.</p>
+    </section>
+
+    <section class="preview" aria-labelledby="look">
+      <h2 id="look"><span data-lang="en">What you'll see</span><span data-lang="de">So sieht es aus</span></h2>
+      <figure style="margin:0">
+        <img src="screens.png" alt="GeistAI screens: boot logo, chat, listening, settings, keyboard and Wi-Fi setup" width="1968" height="2124" loading="lazy">
+        <figcaption>
+          <span data-lang="en">The screens as rendered by the firmware (T-Embed size).</span>
+          <span data-lang="de">Die Bildschirme, so wie die Firmware sie zeichnet (T-Embed-Größe).</span>
+        </figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <footer>
+    <span data-lang="en">GeistAI is open source (MIT).</span>
+    <span data-lang="de">GeistAI ist Open Source (MIT).</span>
+    <a href="https://github.com/Geisterjaeger02/GeistAI">GitHub</a> ·
+    <span id="version"></span>
+  </footer>
+</div>
+
+<script>
+  // Device list. Manifests and firmware are generated by CI (tools/make_flasher.py).
+  const DEVICES = [
+    { id: "tembed_cc1101", name: "LilyGO T-Embed CC1101", screen: "wide",
+      note: { en: "Mic and speaker", de: "Mikrofon und Lautsprecher" },
+      tip: { en: "If no port shows up: hold the BOOT button while plugging in the cable.",
+             de: "Kein Port zu sehen? BOOT-Taste gedrückt halten und dabei das Kabel einstecken." } },
+    { id: "tembed", name: "LilyGO T-Embed", screen: "wide",
+      note: { en: "The original model, mic and speaker", de: "Das Original, Mikrofon und Lautsprecher" },
+      tip: { en: "If no port shows up: hold the BOOT button while plugging in the cable.",
+             de: "Kein Port zu sehen? BOOT-Taste gedrückt halten und dabei das Kabel einstecken." } },
+    { id: "cardputer", name: "M5Stack Cardputer", screen: "small",
+      note: { en: "Keyboard, mic and speaker", de: "Tastatur, Mikrofon und Lautsprecher" },
+      tip: { en: "Switch it on. If no port shows up: hold G0 while plugging in the cable.",
+             de: "Einschalten. Kein Port zu sehen? G0 gedrückt halten und dabei das Kabel einstecken." } },
+    { id: "stickcplus2", name: "M5Stack StickC Plus2", screen: "small",
+      note: { en: "Mic only, answers as text", de: "Nur Mikrofon, antwortet als Text" },
+      tip: { en: "Just plug it in, no button needed.",
+             de: "Einfach einstecken, keine Taste nötig." } },
+  ];
+
+  let lang = "en";
+  try { lang = localStorage.getItem("geist-lang") || (navigator.language || "").startsWith("de") && "de" || "en"; } catch (e) {}
+  let current = DEVICES[0].id;
+  try { current = localStorage.getItem("geist-device") || current; } catch (e) {}
+  if (!DEVICES.some(d => d.id === current)) current = DEVICES[0].id;
+
+  const list = document.getElementById("devices");
+  for (const d of DEVICES) {
+    const el = document.createElement("div");
+    el.className = "device";
+    el.innerHTML =
+      `<input type="radio" name="device" id="d-${d.id}" value="${d.id}">` +
+      `<label for="d-${d.id}"><div class="frame"><div class="screen ${d.screen}"><span>GeistAI</span></div></div>` +
+      `<span class="name">${d.name}</span><span class="note"></span></label>`;
+    list.appendChild(el);
+  }
+
+  function render() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-set-lang]").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.setLang === lang)));
+    const dev = DEVICES.find(d => d.id === current);
+    DEVICES.forEach(d => {
+      const input = document.getElementById("d-" + d.id);
+      input.checked = d.id === current;
+      input.parentElement.querySelector(".note").textContent = d.note[lang];
+    });
+    document.getElementById("installer").setAttribute("manifest", `manifests/${dev.id}.json`);
+    document.getElementById("go").textContent =
+      (lang === "de" ? "Auf " : "Install on ") + dev.name.replace(/^(LilyGO|M5Stack) /, "") +
+      (lang === "de" ? " installieren" : "");
+    document.getElementById("tip").textContent = dev.tip[lang];
+  }
+
+  list.addEventListener("change", e => {
+    current = e.target.value;
+    try { localStorage.setItem("geist-device", current); } catch (err) {}
+    render();
+  });
+  document.querySelectorAll("[data-set-lang]").forEach(b => b.addEventListener("click", () => {
+    lang = b.dataset.setLang;
+    try { localStorage.setItem("geist-lang", lang); } catch (err) {}
+    render();
+  }));
+  render();
+
+  fetch("manifests/tembed_cc1101.json").then(r => r.ok ? r.json() : null).then(m => {
+    if (m) document.getElementById("version").textContent = "Firmware " + m.version;
+  }).catch(() => {});
+</script>
+</body>
+</html>

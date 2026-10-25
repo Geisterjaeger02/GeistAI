@@ -7,14 +7,9 @@
 #include <WiFi.h>
 
 #include "audio.h"
+#include "board.h"
 #include "config.h"
-
-#if __has_include("secrets.h")
-#include "secrets.h"
-#else
-#warning "include/secrets.h missing - copy secrets.example.h to secrets.h and fill it in"
-#include "secrets.example.h"
-#endif
+#include "provision.h"
 
 namespace net {
 namespace {
@@ -71,10 +66,11 @@ uint16_t le16(const uint8_t* p) { return p[0] | (p[1] << 8); }
 // ---------------------------------------------------------------- wifi
 void wifiBegin() {
   WiFi.mode(WIFI_STA);
-  WiFi.setHostname("geistai-embed");
+  WiFi.setHostname(HOSTNAME);
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);  // lower latency for audio streaming
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  const provision::Creds& c = provision::creds();
+  if (!c.ssid.empty()) WiFi.begin(c.ssid.c_str(), c.pass.c_str());
 }
 
 bool wifiConnected() { return WiFi.status() == WL_CONNECTED; }
@@ -125,15 +121,15 @@ static std::string normalizeUrl(std::string u) {
 }
 
 bool findServer() {
-  const char* configured = GEIST_SERVER_URL;
-  if (configured && configured[0]) {
+  const std::string& configured = provision::creds().server;
+  if (!configured.empty()) {
     g_server = normalizeUrl(configured);
-    Serial.printf("[net] server from secrets.h: %s\n", g_server.c_str());
+    Serial.printf("[net] configured server: %s\n", g_server.c_str());
     return healthCheck();
   }
 
   static bool mdnsStarted = false;
-  if (!mdnsStarted) mdnsStarted = MDNS.begin("geistai-embed");
+  if (!mdnsStarted) mdnsStarted = MDNS.begin(HOSTNAME);
   int n = MDNS.queryService(MDNS_SERVICE, "tcp");
   for (int i = 0; i < n; i++) {
     char buf[64];

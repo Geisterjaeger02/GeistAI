@@ -3,6 +3,10 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   firmware:
@@ -34,10 +38,25 @@ jobs:
           # surface compiler errors as annotations (readable without the raw log)
           grep -E "error:|Error [0-9]|undefined reference|fatal" build.log | head -40 | sed 's/^/::error::/'
           exit $status
+      - name: Merge into one image for the web flasher
+        shell: bash
+        run: |
+          pip install esptool==4.8.1
+          B=firmware/.pio/build/${{ matrix.env }}
+          BOOT_APP0=~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin
+          if [ "${{ matrix.env }}" = "stickcplus2" ]; then CHIP=esp32; BL=0x1000; else CHIP=esp32s3; BL=0x0; fi
+          esptool.py --chip $CHIP merge_bin -o geistai-${{ matrix.env }}.bin \
+            --flash_mode keep --flash_freq keep --flash_size keep \
+            $BL $B/bootloader.bin 0x8000 $B/partitions.bin 0xe000 $BOOT_APP0 0x10000 $B/firmware.bin
+          ls -l geistai-${{ matrix.env }}.bin
       - uses: actions/upload-artifact@v4
         with:
           name: geistai-${{ matrix.env }}
           path: firmware/.pio/build/${{ matrix.env }}/firmware.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flash-${{ matrix.env }}
+          path: geistai-${{ matrix.env }}.bin
 
   server:
     name: Server tests
@@ -69,3 +88,30 @@ jobs:
         with:
           name: ui-preview
           path: tools/sim/out/*.png
+
+  # Web flasher on GitHub Pages (only for pushes to main)
+  flasher:
+    name: Web flasher
+    needs: [firmware]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: flash-*
+          merge-multiple: true
+          path: bins
+      - run: python3 tools/make_flasher.py --bins bins --out _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

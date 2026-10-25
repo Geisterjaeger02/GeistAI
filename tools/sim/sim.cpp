@@ -113,6 +113,14 @@ static void renderAll(const std::string& out) {
   // Cardputer: physical keyboard compose screen
   m.kbPhysical = true; m.kbPage = 0; m.kbShift = false; m.kbText = "Hola, ¿qué tal?";
   shot("14_keyboard_physical");
+
+  // Wi-Fi setup hotspot
+  m.kbPhysical = false; m.kbText = "";
+  m.mode = Mode::Setup;
+  m.setupSsid = "GeistAI-3F2A"; m.setupPass = "48210375"; m.setupUrl = "192.168.4.1";
+  shot("15_wifi_setup");
+  m.setupSaved = true;
+  shot("16_wifi_saved");
 }
 
 int main(int argc, char** argv) {

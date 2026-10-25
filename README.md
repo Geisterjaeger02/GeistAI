@@ -1,8 +1,10 @@
 # GeistAI
 
-**A multilingual, private voice assistant for the LilyGO T-Embed.**
-You talk to the T-Embed. It shows and speaks the answer. Speech recognition, the language model and
+**A multilingual, private voice assistant for the LilyGO T-Embed, M5Stack Cardputer and StickC Plus2.**
+You talk to the device. It shows and speaks the answer. Speech recognition, the language model and
 the voice all run on your own computer, so nothing leaves your home network.
+
+**Install it from the browser:** <https://geisterjaeger02.github.io/GeistAI/> (Chrome or Edge on a computer)
 
 ![GeistAI screens (rendered by the desktop simulator)](docs/screens.png)
 
@@ -13,7 +15,19 @@ the voice all run on your own computer, so nothing leaves your home network.
   The menu itself is available in EN / DE / ES / FR.
 - Push-to-talk *or* tap-to-talk with automatic end-of-speech detection
 - LED ring effects for listening, thinking and speaking
-- Runs on the **original T-Embed** and the **T-Embed CC1101**
+- Type instead of talking: on-screen keyboard (T-Embed) or the real keyboard (Cardputer)
+- Wi-Fi setup without a computer: the device opens a hotspot and shows a QR code
+- Runs on these boards:
+
+| Board                  | Mic | Speaker | Keyboard        | Screen  |
+|------------------------|-----|---------|-----------------|---------|
+| LilyGO T-Embed CC1101  | ✓   | ✓       | on-screen       | 320×170 |
+| LilyGO T-Embed         | ✓   | ✓       | on-screen       | 320×170 |
+| M5Stack Cardputer      | ✓   | ✓       | real keys       | 240×135 |
+| M5Stack StickC Plus2   | ✓   | –       | on-screen       | 240×135 |
+
+Without a speaker the answers appear as text, and the server can read them out on your PC
+(`SPEAK_ON_PC=1` in `.env`).
 
 ## How it works
 
@@ -31,13 +45,41 @@ Raspberry Pi 5, NAS or home server) is the "brain". The two find each other auto
 
 ## Quick start
 
-### 1. Server (on your PC)
+### 1. Install the firmware
 
-You need Python 3.10–3.13 (64-bit) and [Ollama](https://ollama.com). The speech engine (ctranslate2) has no packages for brand-new Python releases or for Windows on ARM yet; on Windows: `py install 3.13`, then `py -3.13 -m venv .venv`.
+Open the **[web flasher](https://geisterjaeger02.github.io/GeistAI/)** in Chrome or Edge, pick your
+board, plug it in with a USB-C data cable and click **Install**. Right after installing, the
+browser asks for your Wi-Fi.
+
+If you skip that (or move house later), the device starts its own Wi-Fi hotspot
+**GeistAI-XXXX** and shows a QR code. Scan it with your phone, and a setup page opens where you
+enter your Wi-Fi and, optionally, the server address. You can open the hotspot again any time under
+**Settings → Wi-Fi setup**.
+
+<details>
+<summary>Building it yourself with PlatformIO</summary>
+
+```bash
+cd firmware
+pio run -e tembed_cc1101 -t upload     # T-Embed CC1101
+pio run -e tembed -t upload            # original T-Embed
+pio run -e cardputer -t upload         # M5Stack Cardputer
+pio run -e stickcplus2 -t upload       # M5Stack StickC Plus2
+```
+
+Wi-Fi is then set up with the hotspot as above. Or copy `include/secrets.example.h` to
+`include/secrets.h` and fill it in; those values are applied whenever they change. If uploading
+fails, hold **BOOT** (T-Embed) or **G0** (Cardputer) while plugging in USB.
+</details>
+
+### 2. Start the server
+
+On your PC (or a Raspberry Pi 5, NAS or home server). You need Python 3.10–3.13 (64-bit) and
+[Ollama](https://ollama.com). The speech engine (ctranslate2) has no packages for brand-new Python
+releases or for Windows on ARM yet; on Windows: `py install 3.13`, then `py -3.13 -m venv .venv`.
 
 ```bash
 ollama pull gemma3:4b                 # any multilingual chat model works
-
 cd server
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -47,6 +89,8 @@ python -m geist_server
 ```
 
 On Windows you can afterwards just double-click **`server\start.bat`** to start the server.
+The device finds the server by itself (mDNS). If it doesn't, enter the PC's address
+(e.g. `192.168.1.50`) in the Wi-Fi setup page.
 
 Open <http://localhost:8765> to test it in the browser. You can also run everything with Docker:
 `cp .env.example .env && docker compose up -d`.
@@ -54,21 +98,9 @@ Open <http://localhost:8765> to test it in the browser. You can also run everyth
 Using **LM Studio** instead of Ollama? Set `LLM_BACKEND=openai` and `LLM_URL=http://localhost:1234`
 in `.env`.
 
-### 2. Firmware (on the T-Embed)
-
-Install [PlatformIO](https://platformio.org/) (VS Code extension or CLI).
-
-```bash
-cd firmware
-cp include/secrets.example.h include/secrets.h   # add your Wi-Fi name + password
-pio run -e tembed -t upload            # original T-Embed
-pio run -e tembed_cc1101 -t upload     # T-Embed CC1101
-```
-
-Leave `GEIST_SERVER_URL` empty to find the server automatically, or set it to
-`http://<your-pc-ip>:8765`. If uploading fails, hold the **BOOT** button while plugging in USB.
-
 ## Controls
+
+### T-Embed
 
 | Action                         | What happens                                        |
 |--------------------------------|-----------------------------------------------------|
@@ -82,26 +114,49 @@ Leave `GEIST_SERVER_URL` empty to find the server automatically, or set it to
 | Back button (CC1101)           | Open or close settings (also the ⚙ key)             |
 | **Hold** back button 3 s       | Switch off (hold it ~1 s to switch back on)         |
 
-The keyboard has three pages: letters (QWERTZ with ä ö ü ß), numbers and symbols, and
+### Cardputer
+
+| Action                         | What happens                                        |
+|--------------------------------|-----------------------------------------------------|
+| Just type                      | Opens the message editor. **Enter** sends           |
+| **Hold** G0 or **Space**       | Push-to-talk. Release to send                       |
+| **Tab**                        | Open or close settings                              |
+| **Fn + ;** / **Fn + .**        | Scroll up / down, change a setting                  |
+| **Esc** (` key)                | Close the editor or menu                            |
+
+### StickC Plus2
+
+| Action                         | What happens                                        |
+|--------------------------------|-----------------------------------------------------|
+| **Hold** A (front button)      | Push-to-talk. Release to send                       |
+| **Tap** A                      | Opens the on-screen keyboard / types the key        |
+| B (side)                       | Next (hold: previous)                               |
+| PWR (other side)               | Settings. Hold 3 s to switch off                    |
+
+The on-screen keyboard has three pages: letters (QWERTZ with ä ö ü ß), numbers and symbols, and
 accented letters (á é ñ ç …). ⇧ capitalises the next letter.
 
 **Settings:** speech language (Auto or fixed), menu language, volume, voice replies on/off,
-clear chat, device info (IP address).
+clear chat, Wi-Fi setup, device info (IP address).
 
 ## Project layout
 
 ```
-firmware/            PlatformIO project (Arduino, ESP32-S3)
-  include/board.h    pin maps for both T-Embed variants
+firmware/            PlatformIO project (Arduino, ESP32-S3 / ESP32)
+  include/board.h    pin maps and features of every board
   include/config.h   tunables: recording length, VAD, gains, timeouts …
   src/ui.cpp         all screens (pure rendering, also used by the simulator)
   src/gfx.cpp        tiny anti-aliased renderer + UTF-8 text
   src/audio.cpp      ES7210 / PDM mic, I2S speaker
+  src/hal_m5.cpp     display, buttons, keyboard, audio for the M5Stack boards
   src/net.cpp        Wi-Fi, mDNS discovery, HTTP API, WAV streaming
+  src/provision.cpp  Wi-Fi setup: Improv (web flasher) and the setup hotspot
   src/main.cpp       state machine, worker task, settings
 server/              Python server (FastAPI + faster-whisper + Ollama + Piper)
 tools/gen_assets.py  renders the cursive logo, fonts and icons into C headers
 tools/sim/           desktop simulator: renders every screen to PNG
+tools/make_flasher.py  builds the web flasher site (CI deploys it to GitHub Pages)
+site/index.html      the web flasher page
 docs/protocol.md     HTTP API between device and server
 ```
 
@@ -114,11 +169,12 @@ python3 tools/sim/render.py     # writes tools/sim/out/screens.png
 
 ## Status & roadmap
 
-This is the first version (v0.1). The server pipeline has unit tests, and the screens are previewed
-with the desktop simulator. CI builds the firmware for both boards on every push. The firmware has
-not been tested on a real T-Embed yet. Planned:
+v0.2. The server pipeline has unit tests, and the screens are previewed with the desktop
+simulator. CI builds the firmware for all four boards on every push and publishes the web flasher.
+Tested on a T-Embed CC1101; the Cardputer and StickC Plus2 builds are not tested on hardware yet.
+Planned:
 
-- [ ] Wi-Fi setup through a captive portal (no `secrets.h` needed)
+- [x] Wi-Fi setup without `secrets.h` (web flasher + setup hotspot)
 - [ ] Wake word ("Hey Geist") using the ESP32-S3's on-device wake-word engine
 - [ ] Streaming replies (first words spoken while the LLM is still writing)
 - [ ] Battery gauge for the T-Embed CC1101 (BQ27220)
@@ -132,6 +188,8 @@ not been tested on a real T-Embed yet. Planned:
 - Fonts: [Dancing Script](https://fonts.google.com/specimen/Dancing+Script) and
   [Inter](https://rsms.me/inter/), SIL Open Font License.
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [Ollama](https://ollama.com),
-  [Piper](https://github.com/OHF-Voice/piper1-gpl), [LovyanGFX](https://github.com/lovyan03/LovyanGFX).
+  [Piper](https://github.com/OHF-Voice/piper1-gpl), [LovyanGFX](https://github.com/lovyan03/LovyanGFX),
+  [M5Unified](https://github.com/m5stack/M5Unified), [ESP Web Tools](https://github.com/esphome/esp-web-tools).
+- QR code generator by Richard Moore ([ricmoo/QRCode](https://github.com/ricmoo/QRCode), MIT).
 
 MIT License. See [LICENSE](LICENSE).

@@ -7,6 +7,7 @@
 #if defined(GEIST_BOARD_TEMBED)
 // ---------------------------------------------------------- original T-Embed (ESP32-S3)
 #define BOARD_NAME "T-Embed"
+#define HOSTNAME "geistai-embed"
 #define GEIST_HAL_LILYGO 1
 #define BOARD_HAS_KEYBOARD 0
 #define BOARD_HAS_SPEAKER 1
@@ -57,6 +58,7 @@
 #elif defined(GEIST_BOARD_TEMBED_CC1101)
 // ---------------------------------------------------------- T-Embed CC1101 (ESP32-S3)
 #define BOARD_NAME "T-Embed CC1101"
+#define HOSTNAME "geistai-embed"
 #define GEIST_HAL_LILYGO 1
 #define BOARD_HAS_KEYBOARD 0
 #define BOARD_HAS_SPEAKER 1
@@ -107,6 +109,7 @@
 // ---------------------------------------------------------- M5Stack Cardputer (StampS3, no PSRAM)
 // Display, keyboard, mic and speaker are handled by M5Unified / M5Cardputer.
 #define BOARD_NAME "Cardputer"
+#define HOSTNAME "geistai-cardputer"
 #define GEIST_HAL_M5 1
 #define BOARD_HAS_KEYBOARD 1
 #define BOARD_HAS_SPEAKER 1
@@ -120,6 +123,7 @@
 // ---------------------------------------------------------- M5StickC Plus2 (ESP32-PICO-V3-02)
 // Buttons A / B / PWR, PDM mic; only a buzzer, so voice replies default to off.
 #define BOARD_NAME "StickC Plus2"
+#define HOSTNAME "geistai-stick"
 #define GEIST_HAL_M5 1
 #define BOARD_HAS_KEYBOARD 0
 #define BOARD_HAS_SPEAKER 0

@@ -10,6 +10,7 @@
 #include "assets/logo.h"
 #include "i18n.h"
 #include "keyboard.h"
+#include "qrcode.h"
 
 namespace geist {
 
@@ -457,6 +458,94 @@ void drawOff(Canvas& c, const UiModel& m) {
   c.drawTextCentered(font_title, SCREEN_W / 2, ly + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
 }
 
+// ------------------------------------------------------------ Wi-Fi setup
+// QR code that joins the setup hotspot (standard "WIFI:" format, understood by
+// the iPhone and Android cameras).
+void drawQr(Canvas& c, int x, int y, int module, const std::string& text) {
+  static std::string cachedText;
+  static uint8_t buf[256];  // >= qr_getBufferSize(6)
+  static geistqr::QRCode qr;
+  static bool ok = false;
+  if (text != cachedText) {
+    cachedText = text;
+    ok = false;
+    for (uint8_t v = 4; v <= 6 && !ok; v++)
+      ok = geistqr::qr_initText(&qr, buf, v, QR_ECC_LOW, text.c_str()) == 0;
+  }
+  const int quiet = 2;
+  if (!ok) return;
+  int size = (qr.size + 2 * quiet) * module;
+  c.fillRoundRect(x, y, size, size, 6, SNOW);
+  for (int my = 0; my < qr.size; my++)
+    for (int mx = 0; mx < qr.size; mx++)
+      if (geistqr::qr_getModule(&qr, mx, my))
+        c.fillRect(x + (mx + quiet) * module, y + (my + quiet) * module, module, module, INK);
+}
+
+std::string wifiQrEscape(const std::string& s) {
+  std::string o;
+  for (char ch : s) {
+    if (ch == '\\' || ch == ';' || ch == ',' || ch == ':' || ch == '"') o += '\\';
+    o += ch;
+  }
+  return o;
+}
+
+void drawSetup(Canvas& c, const UiModel& m) {
+  drawBackground(c);
+  const uint8_t L = m.uiLang;
+  if (m.setupSaved) {
+    float cx = SCREEN_W / 2.f, cy = SCREEN_H * 0.4f;
+    c.fillCircle(cx, cy, 24.f, INK);
+    // check mark
+    for (int i = 0; i < 9; i++) c.fillCircle(cx - 10 + i, cy + i * 0.9f - 1, 2.2f, USER_TEXT);
+    for (int i = 0; i < 16; i++) c.fillCircle(cx - 2 + i, cy + 7 - i * 1.1f, 2.2f, USER_TEXT);
+    c.drawTextCentered(font_title, SCREEN_W / 2, (int)cy + 32, tr(L, S_SETUP_SAVED), INK);
+    return;
+  }
+
+  const std::string qrText =
+      "WIFI:T:WPA;S:" + wifiQrEscape(m.setupSsid) + ";P:" + wifiQrEscape(m.setupPass) + ";;";
+  const int module = SMALL ? 3 : 4;
+  const int qrPx = (33 + 4) * module;  // version 4 + quiet zone
+  const int qx = 8, qy = (SCREEN_H - qrPx) / 2;
+  drawQr(c, qx, qy, module, qrText);
+
+  const int tx = qx + qrPx + (SMALL ? 8 : 12);
+  const int tw = SCREEN_W - tx - 6;
+  static Line lines[4];
+  int y = 0;
+  auto para = [&](const Font& f, const std::string& s, uint16_t col) {
+    int n = wrapText(f, s.c_str(), tw, lines, 3);
+    for (int i = 0; i < n; i++, y += f.lineHeight)
+      c.drawText(f, tx, y, s.c_str() + lines[i].start, col, 255, lines[i].len);
+  };
+
+  if (SMALL) {  // narrow column: just the essentials, the QR code explains itself
+    y = 6;
+    para(font_small, tr(L, S_SETUP_JOIN), INK_SOFT);
+    para(font_body, m.setupSsid, INK);
+    y += 3;
+    para(font_small, tr(L, S_SETUP_PASS), INK_SOFT);
+    para(font_body, m.setupPass, INK);
+    y += 3;
+    para(font_small, tr(L, S_SETUP_OPEN), INK_SOFT);
+    para(font_body, m.setupUrl, INK);
+    return;
+  }
+
+  y = 8;
+  c.drawText(font_title, tx, y, tr(L, S_WIFI_SETUP), INK);
+  y += font_title.lineHeight + 6;
+  para(font_small, std::string("1. ") + tr(L, S_SETUP_SCAN), INK);
+  para(font_small, tr(L, S_SETUP_JOIN), INK_SOFT);
+  para(font_body, m.setupSsid, INK);
+  para(font_small, std::string(tr(L, S_SETUP_PASS)) + ": " + m.setupPass, INK);
+  y += 5;
+  para(font_small, std::string("2. ") + tr(L, S_SETUP_OPEN) + " " + m.setupUrl, INK);
+  c.drawText(font_small, tx, SCREEN_H - font_small.lineHeight - 4, tr(L, S_SETUP_CANCEL), INK_SOFT, 200);
+}
+
 // ------------------------------------------------------------ keyboard
 void drawKeyboard(Canvas& c, const UiModel& m) {
   drawBackground(c);
@@ -577,6 +666,10 @@ void render(Canvas& c, const UiModel& m) {
       return;
     case Mode::Keyboard:
       drawKeyboard(c, m);
+      if (m.powerHold > 0.f) drawPowerHold(c, m);
+      return;
+    case Mode::Setup:
+      drawSetup(c, m);
       if (m.powerHold > 0.f) drawPowerHold(c, m);
       return;
     default:

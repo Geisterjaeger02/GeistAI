@@ -29,6 +29,7 @@
 #include "leds.h"
 #include "net.h"
 #include "power.h"
+#include "provision.h"
 #include "ui.h"
 
 using namespace geist;
@@ -127,8 +128,15 @@ static std::string serverErrorText() {
   std::string d = net::lastErrorDetail();
   if (!d.empty()) t += " \xC2\xB7 " + d;
   // our own address: the first three numbers must match the PC's
-  if (net::wifiConnected()) t += std::string("\nT-Embed: ") + WiFi.localIP().toString().c_str();
+  if (net::wifiConnected()) t += std::string("\n" BOARD_NAME ": ") + WiFi.localIP().toString().c_str();
   return t;
+}
+
+// "No Wi-Fi connection · Settings → Wi-Fi setup"
+static std::string wifiErrorText() {
+  uint8_t L = settings.uiLang;
+  return std::string(tr(L, S_ERR_WIFI)) + "\n" + tr(L, S_SETTINGS) + " \xE2\x86\x92 " +
+         tr(L, S_WIFI_SETUP);
 }
 
 static void showErrorLocked(const std::string& text) {
@@ -335,7 +343,7 @@ static void deliver(uint32_t id, const net::ChatResult& res, const std::string* 
         model.kbText = *typed;
       }
       if (res.error == "wifi")
-        showErrorLocked(tr(settings.uiLang, S_ERR_WIFI));
+        showErrorLocked(wifiErrorText());
       else if (res.error == "server" || res.httpCode <= 0)
         showErrorLocked(serverErrorText());
       else if (res.error == "no_speech")
@@ -428,6 +436,7 @@ enum SettingRow : uint8_t {
   ROW_VOLUME,
   ROW_VOICE,
   ROW_CLEAR,
+  ROW_WIFI,
   ROW_INFO,
   ROW_BACK,
   ROW_COUNT
@@ -439,6 +448,8 @@ static void refreshSettingsLocked() {
   char vol[12];
   snprintf(vol, sizeof(vol), "%u %%", settings.volume);
   std::string info = net::wifiConnected() ? std::string(WiFi.localIP().toString().c_str()) : "-";
+  std::string wifiName = provision::hasWifi() ? provision::creds().ssid : "-";
+  if (wifiName.size() > 14) wifiName = wifiName.substr(0, 13) + "\xE2\x80\xA6";
   model.uiLang = L;
   model.settings = {
       {tr(L, S_SPEECH_LANG), kSpeechLangs[settings.speechLang].label},
@@ -446,6 +457,7 @@ static void refreshSettingsLocked() {
       {tr(L, S_VOLUME), vol},
       {tr(L, S_VOICE_REPLY), tr(L, settings.voiceReplies ? S_ON : S_OFF)},
       {tr(L, S_CLEAR_CHAT), chatCleared ? tr(L, S_DONE) : ""},
+      {tr(L, S_WIFI_SETUP), wifiName},
       {tr(L, S_DEVICE_INFO), info},
       {tr(L, S_BACK), ""},
   };
@@ -495,8 +507,10 @@ static void settingsRotate(int delta) {
   refreshSettingsLocked();
 }
 
+static void startSetup();
+
 static void settingsClick() {
-  bool close = false;
+  bool close = false, setup = false;
   {
     ModelLock l;
     switch (model.settingsIndex) {
@@ -515,6 +529,9 @@ static void settingsClick() {
         chatCleared = true;
         sendCommand(CMD_RESET);
         break;
+      case ROW_WIFI:
+        setup = true;
+        break;
       case ROW_BACK:
         close = true;
         break;
@@ -524,6 +541,67 @@ static void settingsClick() {
     refreshSettingsLocked();
   }
   if (close) closeSettings();
+  if (setup) {
+    saveSettings();
+    startSetup();
+  }
+}
+
+// ----------------------------------------------------------------------------
+//  Wi-Fi setup (own hotspot + setup page; the web flasher works any time)
+// ----------------------------------------------------------------------------
+static uint32_t setupSavedAt = 0;
+static void drawFrame();
+
+static void startSetup() {
+  {
+    ModelLock l;
+    model.setupSaved = false;
+    model.setupSsid = "\xE2\x80\xA6";
+    model.setupPass = "";
+    model.setupUrl = "";
+    model.wifiOk = false;
+    model.serverOk = false;
+    setModeLocked(Mode::Setup);
+  }
+  drawFrame();
+  provision::portalStart(settings.uiLang);  // scans for a few seconds
+  ModelLock l;
+  model.setupSsid = provision::portalSsid();
+  model.setupPass = provision::portalPass();
+  model.setupUrl = provision::portalUrl();
+}
+
+static void cancelSetup() {
+  provision::portalStop();
+  net::wifiBegin();  // back to the saved network (if any)
+  ModelLock l;
+  setModeLocked(Mode::Idle);
+}
+
+// Called every loop.
+static void updateProvisioning(uint32_t now) {
+  provision::improvPoll();
+  if (provision::improvJustProvisioned()) {
+    // Wi-Fi was set up from the web flasher over USB
+    if (provision::portalActive()) provision::portalStop();
+    ModelLock l;
+    model.wifiOk = true;
+    if (model.mode == Mode::Setup || model.mode == Mode::Error) setModeLocked(Mode::Idle);
+    if (!workerBusy) sendCommand(CMD_FIND_SERVER);
+  }
+  if (!provision::portalActive()) return;
+  provision::portalPoll();
+  if (provision::portalSaved() && !setupSavedAt) {
+    setupSavedAt = now;
+    ModelLock l;
+    model.setupSaved = true;
+  }
+  if (setupSavedAt && now - setupSavedAt > 2500) {  // let the phone get its answer
+    Serial.println("[setup] restarting with the new Wi-Fi settings");
+    delay(100);
+    ESP.restart();
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -616,6 +694,7 @@ static void onButtonDown(const input::Event& ev) {
     case Mode::Off:
       return;
     case Mode::Settings:
+    case Mode::Setup:
       return;  // handled on release
     case Mode::Keyboard:
       // decided later: a tap types the key, holding switches to talking
@@ -673,6 +752,10 @@ static void onButtonUp(const input::Event& ev) {
     return;
   }
   Mode m = currentMode();
+  if (m == Mode::Setup) {
+    if (!setupSavedAt) cancelSetup();
+    return;
+  }
   if (m == Mode::Settings) {
     if (ev.heldMs >= 700)
       closeSettings();  // long press leaves the menu
@@ -718,6 +801,8 @@ static void onEnter() {
     sendTypedText();
   } else if (m == Mode::Settings) {
     settingsClick();
+  } else if (m == Mode::Setup) {
+    if (!setupSavedAt) cancelSetup();
   } else if (m == Mode::Error) {
     setMode(Mode::Idle);
   }
@@ -733,6 +818,8 @@ static void onEscape() {
   Mode m = currentMode();
   if (m == Mode::Settings)
     closeSettings();
+  else if (m == Mode::Setup && !setupSavedAt)
+    cancelSetup();
   else if (m == Mode::Keyboard || m == Mode::Error)
     setMode(Mode::Idle);
   else if (m == Mode::Speaking)
@@ -756,7 +843,7 @@ static void updateHold(uint32_t now) {
 static void onRotate(int delta) {
   Mode m = currentMode();
   if (m == Mode::Settings) return settingsRotate(delta);
-  if (m == Mode::Boot || m == Mode::Listening) return;
+  if (m == Mode::Boot || m == Mode::Listening || m == Mode::Setup) return;
   ModelLock l;
   if (m == Mode::Keyboard) {
     int n = kb::keyCount();
@@ -816,6 +903,8 @@ static void handleInput() {
         if (!wasPressed || ev.heldMs >= POWER_HOLD_SHOW_MS) break;  // long hold cancelled
         if (currentMode() == Mode::Settings)
           closeSettings();
+        else if (currentMode() == Mode::Setup)
+          cancelSetup();
         else if (currentMode() != Mode::Boot)
           openSettings();
         break;
@@ -859,7 +948,8 @@ static void bootSequence() {
   }
 
   net::wifiBegin();
-  enum { WIFI, SERVER, DONE } phase = WIFI;
+  const bool configured = provision::hasWifi();
+  enum { WIFI, SERVER, DONE } phase = configured ? WIFI : DONE;
   uint32_t phaseStart = millis();
   uint32_t lastFrame = 0;
 
@@ -896,6 +986,7 @@ static void bootSequence() {
       model.wifiOk = net::wifiConnected();
     }
     leds::update(Mode::Boot, 0, now);
+    provision::improvPoll();  // the web flasher asks right after flashing
     handleInput();  // drain early presses
     if (now - lastFrame >= 33) {
       lastFrame = now;
@@ -904,11 +995,16 @@ static void bootSequence() {
     delay(2);
   }
 
+  if (!configured && !net::wifiConnected()) {
+    // first start: no Wi-Fi known yet -> setup hotspot (or the web flasher)
+    startSetup();
+    return;
+  }
   ModelLock l;
   model.wifiOk = net::wifiConnected();
   updateBadgeLocked();
   if (!model.wifiOk)
-    showErrorLocked(tr(settings.uiLang, S_ERR_WIFI));
+    showErrorLocked(wifiErrorText());
   else if (!model.serverOk)
     showErrorLocked(serverErrorText());
   else
@@ -1014,6 +1110,7 @@ void loop() {
   handleInput();
   updateHold(now);
   updatePowerHold(now);
+  updateProvisioning(now);
 
   // Leave the error message after a few seconds.
   {

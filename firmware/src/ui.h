@@ -28,7 +28,7 @@ extern int SCREEN_H;
 void setScreenSize(int w, int h);
 
 enum class Mode : uint8_t {
-  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard
+  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard, Setup
 };
 
 struct ChatMsg {
@@ -84,6 +84,12 @@ struct UiModel {
   int kbPage = 0;
   bool kbShift = false;
   bool kbPhysical = false;  // device has a real keyboard (Cardputer): no on-screen keys
+
+  // Wi-Fi setup hotspot
+  std::string setupSsid;
+  std::string setupPass;
+  std::string setupUrl;
+  bool setupSaved = false;
 
   // power button: 0 = not held, 0..1 = progress towards switching off
   float powerHold = 0.f;

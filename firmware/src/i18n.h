@@ -44,6 +44,13 @@ enum Str : uint8_t {
   S_HINT_MENU_CARDPUTER,
   S_HINT_TALK_STICK,
   S_HINT_MENU_STICK,
+  S_WIFI_SETUP,
+  S_SETUP_SCAN,
+  S_SETUP_JOIN,
+  S_SETUP_PASS,
+  S_SETUP_OPEN,
+  S_SETUP_SAVED,
+  S_SETUP_CANCEL,
   S_COUNT
 };
 
@@ -54,7 +61,8 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Looking for server…", "Starting…", "Ready", "Hi! Hold the knob and just talk to me.",
      "Settings", "Speech language", "Menu language", "Volume", "Voice replies", "Clear chat",
      "Back", "On", "Off", "Auto", "No Wi-Fi connection", "Server not reachable",
-     "I didn't hear anything", "Something went wrong", "Done", "Device info", "Keep holding to turn off", "See you soon!", "Type a message…", "Hold G0 or Space: talk", "Type to write · Tab: settings", "Hold A: talk · A: type", "B: next · PWR: settings"},
+     "I didn't hear anything", "Something went wrong", "Done", "Device info", "Keep holding to turn off", "See you soon!", "Type a message…", "Hold G0 or Space: talk", "Type to write · Tab: settings", "Hold A: talk · A: type", "B: next · PWR: settings",
+     "Wi-Fi setup", "Scan with your phone", "or join this Wi-Fi:", "Password", "then open", "Saved! Restarting…", "Press to cancel"},
     // Deutsch
     {"Halten: sprechen · Tippen: schreiben", "Obere Taste: Einstellungen", "Ich höre zu…",
      "Loslassen zum Senden", "Tippen zum Senden", "Denke nach…", "Spreche…",
@@ -62,7 +70,8 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Hallo! Halte den Knopf gedrückt und sprich einfach mit mir.", "Einstellungen",
      "Sprache (Sprechen)", "Menüsprache", "Lautstärke", "Sprachantwort", "Chat löschen",
      "Zurück", "An", "Aus", "Auto", "Kein WLAN", "Server nicht erreichbar",
-     "Ich habe nichts gehört", "Etwas ist schiefgelaufen", "Fertig", "Geräteinfo", "Halten zum Ausschalten", "Bis bald!", "Nachricht schreiben…", "G0 oder Leertaste halten: sprechen", "Tippen: schreiben · Tab: Menü", "A halten: sprechen · A: schreiben", "B: weiter · PWR: Einstellungen"},
+     "Ich habe nichts gehört", "Etwas ist schiefgelaufen", "Fertig", "Geräteinfo", "Halten zum Ausschalten", "Bis bald!", "Nachricht schreiben…", "G0 oder Leertaste halten: sprechen", "Tippen: schreiben · Tab: Menü", "A halten: sprechen · A: schreiben", "B: weiter · PWR: Einstellungen",
+     "WLAN einrichten", "Mit dem Handy scannen", "oder mit WLAN verbinden:", "Passwort", "dann öffnen", "Gespeichert! Neustart…", "Drücken: abbrechen"},
     // Español
     {"Mantén: hablar · Toca: escribir", "Botón superior: ajustes", "Escuchando…", "Suelta para enviar",
      "Toca para enviar", "Pensando…", "Hablando…", "Clic para parar", "Conectando al Wi-Fi…",
@@ -70,7 +79,8 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "¡Hola! Mantén pulsado el botón y háblame.", "Ajustes", "Idioma de voz",
      "Idioma del menú", "Volumen", "Respuesta por voz", "Borrar chat", "Atrás", "Sí", "No",
      "Auto", "Sin Wi-Fi", "Servidor no disponible", "No he oído nada", "Algo salió mal",
-     "Hecho", "Info del dispositivo", "Mantén para apagar", "¡Hasta pronto!", "Escribe un mensaje…", "Mantén G0 o Espacio: hablar", "Escribe · Tab: ajustes", "Mantén A: hablar · A: escribir", "B: siguiente · PWR: ajustes"},
+     "Hecho", "Info del dispositivo", "Mantén para apagar", "¡Hasta pronto!", "Escribe un mensaje…", "Mantén G0 o Espacio: hablar", "Escribe · Tab: ajustes", "Mantén A: hablar · A: escribir", "B: siguiente · PWR: ajustes",
+     "Configurar Wi-Fi", "Escanea con el móvil", "o conéctate a:", "Clave", "y abre", "¡Guardado! Reiniciando…", "Pulsa: cancelar"},
     // Français
     {"Maintiens : parler · Touche : écrire", "Bouton du haut : réglages", "J'écoute…",
      "Relâche pour envoyer", "Touche pour envoyer", "Je réfléchis…", "Je parle…",
@@ -78,7 +88,8 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
      "Salut ! Maintiens le bouton et parle-moi.", "Réglages", "Langue parlée",
      "Langue du menu", "Volume", "Réponse vocale", "Effacer le chat", "Retour", "Oui", "Non",
      "Auto", "Pas de Wi-Fi", "Serveur injoignable", "Je n'ai rien entendu",
-     "Une erreur est survenue", "Terminé", "Infos appareil", "Maintiens pour éteindre", "À bientôt !", "Écris un message…", "Maintiens G0/Espace : parler", "Écris · Tab : réglages", "Maintiens A : parler · A : écrire", "B : suivant · PWR : réglages"},
+     "Une erreur est survenue", "Terminé", "Infos appareil", "Maintiens pour éteindre", "À bientôt !", "Écris un message…", "Maintiens G0/Espace : parler", "Écris · Tab : réglages", "Maintiens A : parler · A : écrire", "B : suivant · PWR : réglages",
+     "Config. Wi-Fi", "Scanne avec ton mobile", "ou rejoins ce Wi-Fi :", "Mot de passe", "puis ouvre", "Enregistré ! Redémarrage…", "Appuie : annuler"},
 };
 
 static const char* const kUiLangNames[UI_LANG_COUNT] = {"English", "Deutsch", "Español",
