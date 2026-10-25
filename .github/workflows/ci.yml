@@ -69,8 +69,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install numpy fastapi httpx
+      - run: pip install numpy fastapi httpx ddgs
       - run: python -m unittest discover -s tests -t . -v
+      - name: Internet lookups (live, informational)
+        continue-on-error: true
+        run: python -m tests.live_check
       - name: App imports
         run: python -c "from geist_server.app import create_app; print('ok')"
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,7 +16,11 @@ def _load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        value = value.strip().strip('"').strip("'")
+        value = value.strip()
+        if value[:1] in ('"', "'") and value[1:].find(value[0]) >= 0:
+            value = value[1:1 + value[1:].find(value[0])]  # quoted: keep everything inside
+        else:
+            value = "" if value.startswith("#") else re.split(r"\s+#", value, maxsplit=1)[0].strip()
         os.environ.setdefault(key.strip(), value)
 
 
@@ -77,6 +82,11 @@ class Config:
     assistant_name: str = "GeistAI"
     timezone: str = "Europe/Berlin"
 
+    # Internet lookups (weather, web/news search, Wikipedia)
+    tools_enabled: bool = True
+    home_location: str = ""            # default place for "what's the weather like?"
+    tools_timeout_s: float = 8.0
+
     # Text-to-speech (Piper)
     voices_dir: Path = Path("voices")
     voices: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_VOICES))
@@ -108,6 +118,9 @@ class Config:
         cfg.history_turns = _env_int("HISTORY_TURNS", cfg.history_turns)
         cfg.assistant_name = _env("ASSISTANT_NAME", cfg.assistant_name)
         cfg.timezone = _env("GEIST_TIMEZONE", cfg.timezone)
+        cfg.tools_enabled = _env("INTERNET", "1").lower() not in ("0", "false", "no", "off")
+        cfg.home_location = _env("HOME_LOCATION", cfg.home_location).strip()
+        cfg.tools_timeout_s = _env_float("INTERNET_TIMEOUT", cfg.tools_timeout_s)
 
         cfg.voices_dir = Path(_env("VOICES_DIR", str(cfg.voices_dir)))
         cfg.tts_length_scale = _env_float("TTS_LENGTH_SCALE", cfg.tts_length_scale)

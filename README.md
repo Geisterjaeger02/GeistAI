@@ -13,6 +13,8 @@ the voice all run on your own computer, so nothing leaves your home network.
 - **Multilingual:** talk in German, English, Spanish, French, Italian, Portuguese, Dutch, Polish or
   Turkish. The language is detected automatically and the answer comes back in the same language.
   The menu itself is available in EN / DE / ES / FR.
+- **Live answers from the internet:** weather and forecasts (Open-Meteo), web and news search
+  (DuckDuckGo) and Wikipedia. No accounts or API keys needed
 - Push-to-talk *or* tap-to-talk with automatic end-of-speech detection
 - LED ring effects for listening, thinking and speaking
 - Type instead of talking: on-screen keyboard (T-Embed) or the real keyboard (Cardputer)
@@ -36,6 +38,7 @@ flowchart LR
     A[T-Embed<br/>mic + screen + speaker] -- WAV over Wi-Fi --> B[GeistAI server<br/>on your PC]
     B --> C[faster-whisper<br/>speech → text + language]
     C --> D[Local LLM<br/>Ollama / LM Studio]
+    D <-. weather, search, Wikipedia .-> W[(Internet)]
     D --> E[Piper<br/>text → speech]
     E -- reply text + voice --> A
 ```
@@ -95,6 +98,18 @@ The device finds the server by itself (mDNS). If it doesn't, enter the PC's addr
 Open <http://localhost:8765> to test it in the browser. You can also run everything with Docker:
 `cp .env.example .env && docker compose up -d`.
 
+**Internet lookups** are on by default. Add your town to `.env` so "What's the weather like?"
+works without naming a place:
+
+```
+HOME_LOCATION=Bordesholm
+```
+
+Before every answer the model briefly decides whether it needs live data (weather, news, search,
+Wikipedia, or nothing). The server fetches it and the model answers from it, in your language.
+Only the search words and the place name leave your network, never your voice. `INTERNET=0`
+switches it off.
+
 Using **LM Studio** instead of Ollama? Set `LLM_BACKEND=openai` and `LLM_URL=http://localhost:1234`
 in `.env`.
 
@@ -153,6 +168,7 @@ firmware/            PlatformIO project (Arduino, ESP32-S3 / ESP32)
   src/provision.cpp  Wi-Fi setup: Improv (web flasher) and the setup hotspot
   src/main.cpp       state machine, worker task, settings
 server/              Python server (FastAPI + faster-whisper + Ollama + Piper)
+  geist_server/tools.py  internet lookups: weather, search, Wikipedia
 tools/gen_assets.py  renders the cursive logo, fonts and icons into C headers
 tools/sim/           desktop simulator: renders every screen to PNG
 tools/make_flasher.py  builds the web flasher site (CI deploys it to GitHub Pages)
@@ -178,7 +194,8 @@ Planned:
 - [ ] Wake word ("Hey Geist") using the ESP32-S3's on-device wake-word engine
 - [ ] Streaming replies (first words spoken while the LLM is still writing)
 - [ ] Battery gauge for the T-Embed CC1101 (BQ27220)
-- [ ] Tools: weather, timers, Home Assistant
+- [x] Internet: weather, web and news search, Wikipedia
+- [ ] Timers, reminders, Home Assistant
 
 ## Credits
 

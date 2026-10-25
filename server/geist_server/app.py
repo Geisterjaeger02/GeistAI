@@ -55,6 +55,11 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
         langs = tts.available_languages() if hasattr(tts, "available_languages") else []
         log.info("GeistAI server %s on http://%s:%d  (LLM %s via %s, voices: %s)", __version__,
                  lan_ip(), cfg.port, cfg.llm_model, cfg.llm_backend, ", ".join(langs) or "none")
+        if cfg.tools_enabled:
+            log.info("internet lookups on (weather, search, Wikipedia), home: %s",
+                     cfg.home_location or "not set - add HOME_LOCATION=<your town> to .env")
+        else:
+            log.info("internet lookups off (INTERNET=0)")
         yield
         if zc:
             await asyncio.to_thread(zc.close)
@@ -73,6 +78,7 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
             "stt": cfg.whisper_model,
             "llm": f"{cfg.llm_backend}:{cfg.llm_model}",
             "voices": tts.available_languages() if hasattr(tts, "available_languages") else [],
+            "internet": cfg.tools_enabled,
         }
 
     @app.post("/api/chat")
