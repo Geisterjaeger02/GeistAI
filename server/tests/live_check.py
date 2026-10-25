@@ -27,5 +27,36 @@ def main() -> None:
             print(f"::notice title={call.tool} {lang} {'ok' if res.ok else 'FAILED'}::{body}")
 
 
+def check_voices() -> None:
+    """Every default voice must exist on Hugging Face; list alternatives if not."""
+    import httpx
+
+    from geist_server.config import DEFAULT_VOICES
+    from geist_server.download_voices import voice_url
+
+    lines, http = [], httpx.Client(timeout=20, follow_redirects=True)
+    for lang, name in DEFAULT_VOICES.items():
+        r = http.head(voice_url(name, ".onnx.json"))
+        if r.status_code == 200:
+            lines.append(f"{lang}: {name} ok")
+            continue
+        locale = name.split("-")[0]
+        tree = http.get(f"https://huggingface.co/api/models/rhasspy/piper-voices/tree/main/"
+                        f"{locale.split('_')[0]}/{locale}")
+        options = []
+        if tree.status_code == 200:
+            for speaker in tree.json():
+                sub = http.get("https://huggingface.co/api/models/rhasspy/piper-voices/tree/main/"
+                               + speaker["path"])
+                options += [x["path"].split("/")[-1] for x in sub.json()] if sub.ok else []
+        lines.append(f"{lang}: {name} MISSING (HTTP {r.status_code}); available: "
+                     f"{', '.join(options) or 'none for ' + locale}")
+    text = "\n".join(lines)
+    print(text)
+    if os.environ.get("GITHUB_ACTIONS"):
+        print("::notice title=voices::" + text.replace("%", "%25").replace("\n", "%0A"))
+
+
 if __name__ == "__main__":
+    check_voices()
     main()

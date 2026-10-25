@@ -6,3 +6,5 @@ faster-whisper>=1.0.3
 piper-tts>=1.2.0
 zeroconf>=0.132
 ddgs>=9.5            # web + news search (DuckDuckGo), no API key
+num2words>=0.5.13    # years spoken as years (neunzehnhundertsechsunddreißig)
+anyascii>=0.3.2      # shows Chinese, Arabic, Hindi ... in Latin letters on the screen

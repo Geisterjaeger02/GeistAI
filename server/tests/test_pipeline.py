@@ -68,7 +68,7 @@ class TextTests(unittest.TestCase):
 
     def test_display_folds_unsupported_letters(self):
         self.assertEqual(for_display("Ştefan Bucureşti"), "Ştefan Bucureşti")  # Ş is in Latin Ext-A
-        self.assertEqual(for_display("Đ ǅ ș"), "Đ Dz s")
+        self.assertEqual(for_display("Đ ǅ ș ȁ"), "Đ Dz ș a")
 
     def test_display_bullets_and_think(self):
         self.assertEqual(for_display("<think>hmm</think>- eins\n- zwei"), "• eins\n• zwei")

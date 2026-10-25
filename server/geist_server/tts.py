@@ -24,6 +24,24 @@ class PiperTTS:
         self._voices: dict[str, object] = {}
         self._lock = threading.Lock()
         self._espeak = shutil.which("espeak-ng")
+        self._downloads: dict[str, threading.Thread] = {}
+
+    def _download_voice(self, lang: str, wait_s: float) -> None:
+        """First time a language is spoken: fetch its voice (about 60 MB). Waits a
+        little so the answer can still be spoken; otherwise the next one will be."""
+        name = self.cfg.voices.get(lang)
+        if not name or not self.cfg.auto_download_voices:
+            return
+        thread = self._downloads.get(lang)
+        if thread is None:
+            from .download_voices import download
+
+            log.info("downloading the %s voice %s ...", lang, name)
+            thread = threading.Thread(target=download, args=(name, self.cfg.voices_dir),
+                                      daemon=True)
+            self._downloads[lang] = thread
+            thread.start()
+        thread.join(timeout=wait_s)
 
     # ------------------------------------------------------------------ helpers
     def voice_path(self, lang: str) -> Path | None:
@@ -60,6 +78,8 @@ class PiperTTS:
         """Returns a mono 16-bit WAV, or None if no voice exists for `lang`."""
         if not text:
             return None
+        if self.voice_path(lang) is None:
+            self._download_voice(lang, wait_s=20)
         with self._lock:
             try:
                 voice = self._voice(lang)

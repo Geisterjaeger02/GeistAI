@@ -10,5 +10,5 @@ ENV VOICES_DIR=/data/voices \
     HF_HOME=/data/hf
 VOLUME /data
 EXPOSE 8765
-# Fetch the default voices on first start, then run the server.
-CMD ["sh", "-c", "python -m geist_server.download_voices || true; python -m geist_server"]
+# Fetch a few voices on first start (others download when first spoken), then run.
+CMD ["sh", "-c", "python -m geist_server.download_voices de en es fr || true; python -m geist_server"]

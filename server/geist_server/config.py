@@ -53,7 +53,29 @@ DEFAULT_VOICES = {
     "nl": "nl_NL-mls-medium",
     "pl": "pl_PL-gosia-medium",
     "tr": "tr_TR-dfki-medium",
+    "ru": "ru_RU-irina-medium",
+    "uk": "uk_UA-ukrainian_tts-medium",
+    "cs": "cs_CZ-jirka-medium",
+    "sk": "sk_SK-lili-medium",
+    "sv": "sv_SE-nst-medium",
+    "da": "da_DK-talesyntese-medium",
+    "no": "no_NO-talesyntese-medium",
+    "fi": "fi_FI-harri-medium",
+    "hu": "hu_HU-anna-medium",
+    "ro": "ro_RO-mihai-medium",
+    "el": "el_GR-rapunzelina-low",
+    "ca": "ca_ES-upc_ona-medium",
+    "sr": "sr_RS-serbski_institut-medium",
+    "ar": "ar_JO-kareem-medium",
+    "fa": "fa_IR-amir-medium",
+    "hi": "hi_IN-pratham-medium",
+    "zh": "zh_CN-huayan-medium",
+    "vi": "vi_VN-vais1000-medium",
+    "id": "id_ID-news_tts-medium",
 }
+# Spoken languages detected by default (all languages with a voice).
+DEFAULT_LANGUAGES = ",".join(DEFAULT_VOICES)
+OLD_DEFAULT_LANGUAGES = "de,en,es,fr,it,pt,nl,pl,tr"
 
 
 @dataclass
@@ -92,6 +114,7 @@ class Config:
     voices_dir: Path = Path("voices")
     voices: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_VOICES))
     tts_length_scale: float = 1.0      # >1 = slower speech
+    auto_download_voices: bool = True  # fetch a voice the first time a language is spoken
     speak_on_pc: bool = False          # also play replies on this computer's speakers
 
     @classmethod
@@ -105,7 +128,7 @@ class Config:
         cfg.whisper_model = _env("WHISPER_MODEL", cfg.whisper_model)
         cfg.whisper_device = _env("WHISPER_DEVICE", cfg.whisper_device)
         cfg.whisper_compute = _env("WHISPER_COMPUTE", cfg.whisper_compute)
-        langs = _env("ALLOWED_LANGUAGES", "de,en,es,fr,it,pt,nl,pl,tr")
+        langs = _env("ALLOWED_LANGUAGES", DEFAULT_LANGUAGES)
         cfg.allowed_languages = [x.strip() for x in langs.split(",") if x.strip()]
 
         cfg.llm_backend = _env("LLM_BACKEND", cfg.llm_backend).lower()
@@ -127,6 +150,8 @@ class Config:
         cfg.voices_dir = Path(_env("VOICES_DIR", str(cfg.voices_dir)))
         cfg.tts_length_scale = _env_float("TTS_LENGTH_SCALE", cfg.tts_length_scale)
         cfg.speak_on_pc = _env("SPEAK_ON_PC", "0").lower() in ("1", "true", "yes", "on")
+        cfg.auto_download_voices = _env("AUTO_DOWNLOAD_VOICES", "1").lower() not in (
+            "0", "false", "no", "off")
         # Override single voices: VOICE_DE=de_DE-kerstin-low
         for key, value in os.environ.items():
             if key.startswith("VOICE_") and len(key) == 8 and value:

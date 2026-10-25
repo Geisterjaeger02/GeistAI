@@ -115,6 +115,13 @@ def main(argv: list[str] | None = None) -> int:
         args.yes)
     set_env(env_path, "HOME_LOCATION", home)
 
+    # an .env from an older version limits speech recognition to 9 languages
+    from .config import DEFAULT_LANGUAGES, OLD_DEFAULT_LANGUAGES
+
+    if env.get("ALLOWED_LANGUAGES", "").replace(" ", "") == OLD_DEFAULT_LANGUAGES:
+        set_env(env_path, "ALLOWED_LANGUAGES", DEFAULT_LANGUAGES)
+        print("Speech recognition now listens for all supported languages.")
+
     speak = args.speak_on_pc
     if speak is None:
         speak = "1" if ask_yes_no(

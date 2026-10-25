@@ -107,7 +107,7 @@ class Assistant:
 
         audio_id = None
         if want_voice or self.speak_locally:
-            speech = self.tts.synthesize(for_speech(raw), lang)
+            speech = self.tts.synthesize(for_speech(raw, lang), lang)
             if speech and self.speak_locally:
                 self.speak_locally(speech)
             if speech and want_voice:
