@@ -37,6 +37,11 @@ class PiperTTS:
         langs = [lang for lang in self.cfg.voices if self.voice_path(lang)]
         return sorted(langs)
 
+    def warmup(self) -> None:
+        """Load every installed voice once."""
+        for lang in self.available_languages():
+            self.synthesize("ok", lang)
+
     def _voice(self, lang: str):
         if lang in self._voices:
             return self._voices[lang]

@@ -34,7 +34,7 @@
 #define POWER_OFF_SHIP_MODE 0
 
 // ---------------------------------------------------------------- network
-#define HTTP_TIMEOUT_MS 60000      // the LLM may take a while on slow machines
+#define HTTP_TIMEOUT_MS 65000      // max the HTTP client allows (uint16 ms)
 #define WIFI_CONNECT_TIMEOUT_MS 20000
 #define SERVER_DEFAULT_PORT 8765
 #define MDNS_SERVICE "geistai"     // server announces _geistai._tcp

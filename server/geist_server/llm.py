@@ -84,8 +84,12 @@ class LLMClient:
         self.memory.add(device, text, answer)
         return answer
 
+    def warmup(self) -> None:
+        """Load the model into memory now, so the first real question is fast."""
+        self._complete([{"role": "user", "content": "Hi"}], max_tokens=1)
+
     # ------------------------------------------------------------------ backends
-    def _complete(self, messages: list[dict]) -> str:
+    def _complete(self, messages: list[dict], max_tokens: int | None = None) -> str:
         import httpx
 
         cfg = self.cfg
@@ -95,9 +99,9 @@ class LLMClient:
                     "model": cfg.llm_model,
                     "messages": messages,
                     "stream": False,
-                    "keep_alive": "30m",
+                    "keep_alive": cfg.llm_keep_alive,
                     "options": {"temperature": cfg.llm_temperature,
-                                "num_predict": cfg.llm_max_tokens},
+                                "num_predict": max_tokens or cfg.llm_max_tokens},
                 })
                 r.raise_for_status()
                 return r.json()["message"]["content"]
@@ -107,7 +111,7 @@ class LLMClient:
                 "model": cfg.llm_model,
                 "messages": messages,
                 "temperature": cfg.llm_temperature,
-                "max_tokens": cfg.llm_max_tokens,
+                "max_tokens": max_tokens or cfg.llm_max_tokens,
             })
             r.raise_for_status()
             return r.json()["choices"][0]["message"]["content"]
