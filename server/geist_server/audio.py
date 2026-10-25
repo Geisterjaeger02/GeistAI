@@ -38,6 +38,33 @@ def wav_to_float32(data: bytes) -> tuple[np.ndarray, int]:
     return pcm, TARGET_RATE
 
 
+def pcm16_to_wav(data: bytes, rate: int = TARGET_RATE, channels: int = 1) -> bytes:
+    """Wraps raw little-endian 16-bit PCM (audio/L16 uploads) into a WAV."""
+    data = data[: len(data) - (len(data) % (2 * channels))]
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(data)
+    return buf.getvalue()
+
+
+def parse_l16_params(content_type: str) -> tuple[int, int]:
+    """'audio/L16; rate=16000; channels=1' -> (16000, 1)"""
+    rate, channels = TARGET_RATE, 1
+    for part in content_type.split(";")[1:]:
+        key, _, value = part.strip().partition("=")
+        try:
+            if key.lower() == "rate":
+                rate = int(value)
+            elif key.lower() == "channels":
+                channels = int(value)
+        except ValueError:
+            pass
+    return rate, channels
+
+
 def normalize(pcm: np.ndarray, peak: float = 0.9) -> np.ndarray:
     """Remove DC offset and bring quiet recordings up to a sensible level."""
     if not len(pcm):

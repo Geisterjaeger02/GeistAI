@@ -11,4 +11,7 @@ void handleWakeUp();
 // Turns everything off. Never returns. The caller shows the goodbye screen first.
 void switchOff();
 
+// Battery charge 0..100, or -1 if unknown / running on USB only.
+int batteryPercent();
+
 }  // namespace power

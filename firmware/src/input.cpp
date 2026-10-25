@@ -1,3 +1,7 @@
+// LilyGO T-Embed implementation (see hal_m5.cpp for the M5Stack boards).
+#include "board.h"
+#if GEIST_HAL_LILYGO
+
 #include "input.h"
 
 #include <Arduino.h>
@@ -113,3 +117,5 @@ bool poll(Event& ev) {
 }
 
 }  // namespace input
+
+#endif  // GEIST_HAL_LILYGO

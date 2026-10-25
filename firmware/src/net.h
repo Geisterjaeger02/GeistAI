@@ -37,6 +37,13 @@ struct ChatResult {
 // Uploads a 16 kHz mono WAV (header included) and waits for the reply.
 ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool wantVoice);
 
+// Streaming upload for boards without PSRAM: raw 16 kHz PCM is sent with
+// chunked transfer encoding while recording (POST /api/chat, audio/L16).
+bool streamBegin(const char* lang, bool wantVoice);
+bool streamWrite(const int16_t* pcm, size_t samples);
+ChatResult streamFinish();  // ends the upload and waits for the answer
+void streamAbort();
+
 // Sends a typed message (POST /api/text).
 ChatResult sendText(const std::string& text, const char* lang, bool wantVoice);
 

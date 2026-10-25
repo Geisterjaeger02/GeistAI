@@ -165,6 +165,151 @@ bool healthCheck() {
 }
 
 // ---------------------------------------------------------------- chat
+static void parseChatJson(int code, const char* body, size_t len, ChatResult& res) {
+  res.httpCode = code;
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, body, len);
+  if (err) {
+    res.error = "bad response";
+    return;
+  }
+  res.ok = code == 200 && (doc["ok"] | false);
+  res.transcript = (const char*)(doc["transcript"] | "");
+  res.reply = (const char*)(doc["reply"] | "");
+  res.language = (const char*)(doc["language"] | "");
+  res.audioPath = (const char*)(doc["audio"] | "");
+  res.error = (const char*)(doc["error"] | "");
+}
+
+// ---------------------------------------------------------------- streaming upload
+namespace {
+WiFiClient g_stream;
+
+bool splitServer(std::string& host, uint16_t& port) {
+  std::string rest = g_server;
+  size_t p = rest.find("://");
+  if (p != std::string::npos) rest = rest.substr(p + 3);
+  size_t slash = rest.find('/');
+  if (slash != std::string::npos) rest = rest.substr(0, slash);
+  size_t colon = rest.rfind(':');
+  host = rest.substr(0, colon);
+  port = colon == std::string::npos ? 80 : (uint16_t)atoi(rest.c_str() + colon + 1);
+  return !host.empty();
+}
+
+bool writeAll(const void* data, size_t n) {
+  const uint8_t* d = (const uint8_t*)data;
+  size_t off = 0;
+  uint32_t t0 = millis();
+  while (off < n) {
+    size_t w = g_stream.write(d + off, n - off);
+    if (w > 0) {
+      off += w;
+      t0 = millis();
+    } else {
+      if (!g_stream.connected() || millis() - t0 > 5000) return false;
+      delay(1);
+    }
+  }
+  return true;
+}
+
+bool readLine(std::string& line, uint32_t timeoutMs) {
+  line.clear();
+  uint32_t t0 = millis();
+  for (;;) {
+    while (g_stream.available()) {
+      char c = (char)g_stream.read();
+      if (c == '\n') {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        return true;
+      }
+      if (line.size() < 512) line += c;
+      t0 = millis();
+    }
+    if (!g_stream.connected() && !g_stream.available()) return !line.empty();
+    if (millis() - t0 > timeoutMs) return false;
+    delay(2);
+  }
+}
+}  // namespace
+
+bool streamBegin(const char* lang, bool wantVoice) {
+  if (!wifiConnected()) return false;
+  if (g_server.empty() && !findServer()) return false;
+  std::string host;
+  uint16_t port;
+  if (!splitServer(host, port)) return false;
+  g_stream.stop();
+  if (!g_stream.connect(host.c_str(), port, 4000)) {
+    noteHttpError(HTTPC_ERROR_CONNECTION_REFUSED);
+    return false;
+  }
+  g_stream.setNoDelay(true);
+  std::string req = "POST /api/chat?device=" + deviceId() + "&lang=" + urlEncode(lang) +
+                    "&tts=" + (wantVoice ? "1" : "0") + " HTTP/1.1\r\nHost: " + host + ":" +
+                    std::to_string(port) +
+                    "\r\nContent-Type: audio/L16; rate=16000; channels=1\r\n"
+                    "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+  if (!writeAll(req.data(), req.size())) {
+    noteHttpError(HTTPC_ERROR_SEND_HEADER_FAILED);
+    g_stream.stop();
+    return false;
+  }
+  return true;
+}
+
+bool streamWrite(const int16_t* pcm, size_t samples) {
+  if (!samples) return true;
+  char hdr[12];
+  int hl = snprintf(hdr, sizeof(hdr), "%X\r\n", (unsigned)(samples * 2));
+  bool ok = writeAll(hdr, hl) && writeAll(pcm, samples * 2) && writeAll("\r\n", 2);
+  if (!ok) noteHttpError(HTTPC_ERROR_SEND_PAYLOAD_FAILED);
+  return ok;
+}
+
+void streamAbort() { g_stream.stop(); }
+
+ChatResult streamFinish() {
+  ChatResult res;
+  if (!writeAll("0\r\n\r\n", 5)) {
+    noteHttpError(HTTPC_ERROR_SEND_PAYLOAD_FAILED);
+    res.error = "server";
+    g_stream.stop();
+    return res;
+  }
+  // status line, e.g. "HTTP/1.1 200 OK" (the server may need a while to think)
+  std::string line;
+  if (!readLine(line, 120000) || line.rfind("HTTP/", 0) != 0) {
+    noteHttpError(HTTPC_ERROR_READ_TIMEOUT);
+    res.error = "server";
+    g_stream.stop();
+    return res;
+  }
+  size_t sp = line.find(' ');
+  int code = sp == std::string::npos ? 0 : atoi(line.c_str() + sp + 1);
+  long contentLength = -1;
+  while (readLine(line, 10000) && !line.empty()) {
+    std::string lower = line;
+    for (auto& ch : lower) ch = tolower((unsigned char)ch);
+    if (lower.rfind("content-length:", 0) == 0) contentLength = atol(lower.c_str() + 15);
+  }
+  std::string body;
+  uint32_t t0 = millis();
+  while ((contentLength < 0 || (long)body.size() < contentLength) && millis() - t0 < 10000) {
+    while (g_stream.available()) {
+      body += (char)g_stream.read();
+      t0 = millis();
+    }
+    if (!g_stream.connected() && !g_stream.available()) break;
+    delay(2);
+  }
+  g_stream.stop();
+  parseChatJson(code, body.data(), body.size(), res);
+  if (code <= 0) res.error = "server";
+  return res;
+}
+
 // Shared by voice and text: POSTs `body` to `path` and parses the JSON reply.
 static ChatResult postChat(const char* path, const char* contentType, const uint8_t* body,
                            size_t len, const char* lang, bool wantVoice) {
@@ -199,19 +344,7 @@ static ChatResult postChat(const char* path, const char* contentType, const uint
   }
   String reply = http.getString();
   http.end();
-
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, reply.c_str(), reply.length());
-  if (err) {
-    res.error = "bad response";
-    return res;
-  }
-  res.ok = code == 200 && (doc["ok"] | false);
-  res.transcript = (const char*)(doc["transcript"] | "");
-  res.reply = (const char*)(doc["reply"] | "");
-  res.language = (const char*)(doc["language"] | "");
-  res.audioPath = (const char*)(doc["audio"] | "");
-  res.error = (const char*)(doc["error"] | "");
+  parseChatJson(code, reply.c_str(), reply.length(), res);
   return res;
 }
 

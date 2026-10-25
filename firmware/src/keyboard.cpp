@@ -83,8 +83,18 @@ const Key& key(int page, int index) {
   return g_keys[page][index];
 }
 
+int g_left = 4, g_width = 312, g_top = 46, g_rowH = 31, g_gap = 3;
+
+void setLayout(int w, int h) {
+  g_left = w < 300 ? 2 : 4;
+  g_width = w - 2 * g_left;
+  g_top = h < 160 ? 30 : 46;
+  g_rowH = (h - g_top - 1) / 4;
+  g_gap = w < 300 ? 2 : 3;
+}
+
 Rect keyRect(int index) {
-  const int left = 4, width = 312, top = 46, rowH = 31, gap = 3;
+  const int left = g_left, width = g_width, top = g_top, rowH = g_rowH, gap = g_gap;
   int row = index < CHAR_KEYS ? index / ROW_KEYS : CHAR_ROWS;
   int first = row < CHAR_ROWS ? row * ROW_KEYS : CHAR_KEYS;
   int units = 0;

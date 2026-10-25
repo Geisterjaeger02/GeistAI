@@ -26,8 +26,7 @@ static void savePPM(const std::string& path, const std::vector<uint16_t>& fb) {
   fclose(f);
 }
 
-int main(int argc, char** argv) {
-  std::string out = argc > 1 ? argv[1] : "./";
+static void renderAll(const std::string& out) {
   std::vector<uint16_t> fb(SCREEN_W * SCREEN_H);
   Canvas c(fb.data(), SCREEN_W, SCREEN_H);
 
@@ -111,6 +110,17 @@ int main(int argc, char** argv) {
   m.kbText = ""; m.kbPage = 2; m.kbShift = true; m.kbIndex = 39;
   shot("13_keyboard_accents");
 
+  // Cardputer: physical keyboard compose screen
+  m.kbPhysical = true; m.kbPage = 0; m.kbShift = false; m.kbText = "Hola, ¿qué tal?";
+  shot("14_keyboard_physical");
+}
+
+int main(int argc, char** argv) {
+  std::string out = argc > 1 ? argv[1] : "./";
+  setScreenSize(320, 170);
+  renderAll(out + "tembed_");
+  setScreenSize(240, 135);
+  renderAll(out + "m5_");
   printf("ok\n");
   return 0;
 }

@@ -1,3 +1,7 @@
+// LilyGO T-Embed implementation (see hal_m5.cpp for the M5Stack boards).
+#include "board.h"
+#if GEIST_HAL_LILYGO
+
 #include "display.h"
 
 #include <Arduino.h>
@@ -134,6 +138,8 @@ bool begin() {
 }
 
 uint16_t* framebuffer() { return fb; }
+int width() { return 320; }
+int height() { return 170; }
 
 void present() {
   if (!fb) return;
@@ -157,3 +163,5 @@ void status(const char* msg) {
 }
 
 }  // namespace display
+
+#endif  // GEIST_HAL_LILYGO

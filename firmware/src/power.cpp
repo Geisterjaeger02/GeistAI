@@ -1,3 +1,7 @@
+// LilyGO T-Embed implementation (see hal_m5.cpp for the M5Stack boards).
+#include "board.h"
+#if GEIST_HAL_LILYGO
+
 #include "power.h"
 
 #include <Arduino.h>
@@ -104,4 +108,17 @@ void switchOff() {
 #endif
 }
 
+int batteryPercent() {
+#if PIN_BAT_ADC >= 0
+  uint32_t mv = analogReadMilliVolts(PIN_BAT_ADC) * 2;  // 1:2 divider
+  if (mv > 4350 || mv < 2500) return -1;               // USB only / no battery
+  int pct = (int)((mv - 3300) * 100 / (4150 - 3300));
+  return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+#else
+  return -1;
+#endif
+}
+
 }  // namespace power
+
+#endif  // GEIST_HAL_LILYGO

@@ -10,6 +10,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+from starlette.requests import ClientDisconnect
+
+from . import audio as wavutil
 
 from . import __version__
 from .config import Config
@@ -74,9 +77,17 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
 
     @app.post("/api/chat")
     async def chat(request: Request, device: str = "unknown", lang: str = "auto", tts: int = 1):
-        data = await request.body()
+        try:
+            data = await request.body()  # also handles chunked uploads (streaming devices)
+        except ClientDisconnect:
+            log.info("[%s] upload cancelled", device)
+            return Response(status_code=499)
         if not data:
             raise HTTPException(400, "empty body")
+        content_type = request.headers.get("content-type", "")
+        if content_type.lower().startswith("audio/l16"):
+            rate, channels = wavutil.parse_l16_params(content_type)
+            data = wavutil.pcm16_to_wav(data, rate, channels)
         try:
             result = await run_in_threadpool(assistant.handle_audio, data, device, lang, bool(tts))
         except ChatError as e:

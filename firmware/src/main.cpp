@@ -53,7 +53,7 @@ struct Settings {
   uint8_t speechLang = 0;  // index into kSpeechLangs (0 = auto)
   uint8_t uiLang = DEFAULT_UI_LANG;
   uint8_t volume = DEFAULT_VOLUME;
-  bool voiceReplies = true;
+  bool voiceReplies = BOARD_HAS_SPEAKER;
 } settings;
 
 static Preferences prefs;
@@ -170,7 +170,7 @@ static void loadSettings() {
   settings.speechLang = prefs.getUChar("slang", 0);
   settings.uiLang = prefs.getUChar("ulang", DEFAULT_UI_LANG);
   settings.volume = prefs.getUChar("vol", DEFAULT_VOLUME);
-  settings.voiceReplies = prefs.getBool("voice", true);
+  settings.voiceReplies = prefs.getBool("voice", BOARD_HAS_SPEAKER);
   prefs.end();
   if (settings.speechLang >= kSpeechLangCount) settings.speechLang = 0;
   if (settings.uiLang >= UI_LANG_COUNT) settings.uiLang = UI_EN;
@@ -190,9 +190,20 @@ static void saveSettings() {
 // ----------------------------------------------------------------------------
 static void deliver(uint32_t id, const net::ChatResult& res, const std::string* typed);
 
+// Without PSRAM the first moments of a press are kept here until we know it
+// is a long press; then the stream to the server is opened and this is sent.
+static int16_t* prerollBuf = nullptr;
+static const size_t kPrerollSamples = MIC_SAMPLE_RATE * 6 / 10;  // 0.6 s
+
 static void runTurn(uint32_t id) {
   if (isCancelled(id)) return;
   bool shown = false;  // "listening" is only shown once the press is a long press
+  const bool streaming = recSamples == nullptr;
+  const char* lang = kSpeechLangs[settings.speechLang].code;
+  bool streamOpen = false, streamFailed = false;
+  size_t prerollN = 0;
+  static int16_t chunk[512];
+  if (streaming && !prerollBuf) prerollBuf = (int16_t*)malloc(kPrerollSamples * sizeof(int16_t));
 
   // ---------------- record
   audio::micStart();
@@ -205,7 +216,8 @@ static void runTurn(uint32_t id) {
     float rms = 0;
     size_t want = kMaxSamples - n;
     if (want > 512) want = 512;
-    size_t got = audio::micRead(recSamples + n, want, &rms);
+    int16_t* dst = streaming ? chunk : recSamples + n;
+    size_t got = audio::micRead(dst, want, &rms);
     n += got;
     uint32_t chunkMs = got * 1000 / MIC_SAMPLE_RATE;
     elapsedMs += chunkMs;
@@ -220,6 +232,24 @@ static void runTurn(uint32_t id) {
         shown = true;
         model.scroll = 0;
         setModeLocked(Mode::Listening);
+      }
+    }
+    if (streaming && !streamFailed) {
+      if (!streamOpen && shown) {  // long press confirmed: open the stream, send what we have
+        streamOpen = net::streamBegin(lang, settings.voiceReplies);
+        if (streamOpen && prerollN) streamOpen = net::streamWrite(prerollBuf, prerollN);
+        if (!streamOpen) streamFailed = true;
+      }
+      if (streamOpen) {
+        if (!net::streamWrite(chunk, got)) {
+          streamOpen = false;
+          streamFailed = true;
+        }
+      } else if (!streamFailed && prerollBuf) {
+        size_t room = kPrerollSamples - prerollN;
+        size_t take = got < room ? got : room;
+        memcpy(prerollBuf + prerollN, chunk, take * sizeof(int16_t));
+        prerollN += take;
       }
     }
     if (isCancelled(id) || recStop) break;
@@ -243,14 +273,24 @@ static void runTurn(uint32_t id) {
   }
   audio::micStop();
   micLevel = 0;
-  if (isCancelled(id) || !shown) return;
+  if (isCancelled(id) || !shown) {
+    if (streamOpen) net::streamAbort();
+    return;
+  }
 
   uint32_t durMs = n * 1000 / MIC_SAMPLE_RATE;
   float avgRms = n ? (float)(energy / n) : 0.f;
-  Serial.printf("[turn %u] recorded %u ms, avg rms %.0f\n", id, durMs, avgRms);
+  Serial.printf("[turn %u] recorded %u ms, avg rms %.0f%s\n", id, durMs, avgRms,
+                streaming ? " (streamed)" : "");
   if (durMs < MIN_RECORD_MS || noSpeech || avgRms < VAD_MIN_RMS * 0.25f) {
+    if (streamOpen) net::streamAbort();
     ModelLock l;
     showErrorLocked(tr(settings.uiLang, S_ERR_NOTHING_HEARD));
+    return;
+  }
+  if (streaming && !streamOpen) {  // could not reach the server while recording
+    ModelLock l;
+    showErrorLocked(serverErrorText());
     return;
   }
 
@@ -263,9 +303,13 @@ static void runTurn(uint32_t id) {
     model.scroll = 0;
     setModeLocked(Mode::Thinking);
   }
-  writeWavHeader(wavBuf, n * 2, MIC_SAMPLE_RATE);
-  const char* lang = kSpeechLangs[settings.speechLang].code;
-  net::ChatResult res = net::sendVoice(wavBuf, 44 + n * 2, lang, settings.voiceReplies);
+  net::ChatResult res;
+  if (streaming) {
+    res = net::streamFinish();
+  } else {
+    writeWavHeader(wavBuf, n * 2, MIC_SAMPLE_RATE);
+    res = net::sendVoice(wavBuf, 44 + n * 2, lang, settings.voiceReplies);
+  }
   Serial.printf("[turn %u] http %d ok=%d lang=%s\n", id, res.httpCode, res.ok,
                 res.language.c_str());
 
@@ -642,6 +686,59 @@ static void onButtonUp(const input::Event& ev) {
   }
 }
 
+// ---------------------------------------------------------------- physical keyboard
+// (Cardputer). Typing opens the message editor right away.
+static void sendTypedText() {
+  {
+    ModelLock l;
+    std::string& t = model.kbText;
+    while (!t.empty() && t.back() == ' ') t.pop_back();
+    if (t.empty()) return;
+    pendingText = t;
+    t.clear();
+  }
+  sendCommand(CMD_TEXT, ++turnSeq);
+}
+
+static void onChar(const char* text) {
+  Mode m = currentMode();
+  if (m == Mode::Speaking) {
+    playStop = true;
+  } else if (m != Mode::Idle && m != Mode::Error && m != Mode::Keyboard) {
+    return;
+  }
+  if (m != Mode::Keyboard) openKeyboard();
+  ModelLock l;
+  if (model.kbText.size() + strlen(text) <= (size_t)kb::TEXT_MAX) model.kbText += text;
+}
+
+static void onEnter() {
+  Mode m = currentMode();
+  if (m == Mode::Keyboard) {
+    sendTypedText();
+  } else if (m == Mode::Settings) {
+    settingsClick();
+  } else if (m == Mode::Error) {
+    setMode(Mode::Idle);
+  }
+}
+
+static void onBackspace() {
+  if (currentMode() != Mode::Keyboard) return;
+  ModelLock l;
+  popLastChar(model.kbText);
+}
+
+static void onEscape() {
+  Mode m = currentMode();
+  if (m == Mode::Settings)
+    closeSettings();
+  else if (m == Mode::Keyboard || m == Mode::Error)
+    setMode(Mode::Idle);
+  else if (m == Mode::Speaking)
+    playStop = true;
+}
+
 // Called every loop: turns a held press into push-to-talk.
 static void updateHold(uint32_t now) {
   bool down = input::buttonIsDown();
@@ -688,6 +785,27 @@ static void handleInput() {
       case input::EventType::BackDown:
         backDownAt = ev.atMs;
         break;
+      case input::EventType::Char:
+        onChar(ev.text);
+        break;
+      case input::EventType::Enter:
+        onEnter();
+        break;
+      case input::EventType::Backspace:
+        onBackspace();
+        break;
+      case input::EventType::Escape:
+        onEscape();
+        break;
+      case input::EventType::SpaceDown:  // types a space, otherwise hold-to-talk like G0
+        if (currentMode() == Mode::Keyboard)
+          onChar(" ");
+        else
+          onButtonDown(ev);
+        break;
+      case input::EventType::SpaceUp:
+        if (pressStartedTurn || tapOnly) onButtonUp(ev);
+        break;
       case input::EventType::BackUp: {
         bool wasPressed = backDownAt != 0;  // ignore the release after waking up
         backDownAt = 0;
@@ -725,17 +843,6 @@ static void drawFrame() {
     render(*canvas, model);
   }
   display::present();
-}
-
-static int readBatteryPct() {
-#if PIN_BAT_ADC >= 0
-  uint32_t mv = analogReadMilliVolts(PIN_BAT_ADC) * 2;  // 1:2 divider
-  if (mv > 4350 || mv < 2500) return -1;               // USB only / no battery
-  int pct = (int)((mv - 3300) * 100 / (4150 - 3300));
-  return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
-#else
-  return -1;
-#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -810,8 +917,10 @@ static void bootSequence() {
 
 void setup() {
   power::handleWakeUp();  // goes back to sleep if the button was only bumped
+#if PIN_POWER_ON >= 0
   pinMode(PIN_POWER_ON, OUTPUT);
   digitalWrite(PIN_POWER_ON, HIGH);
+#endif
   Serial.begin(115200);
   // give the USB serial monitor a moment to attach so the boot log isn't lost
   for (uint32_t t0 = millis(); !Serial && millis() - t0 < 1500;) delay(10);
@@ -824,6 +933,17 @@ void setup() {
 
   loadSettings();
   model.uiLang = settings.uiLang;
+  model.kbPhysical = BOARD_HAS_KEYBOARD;
+#if defined(GEIST_BOARD_CARDPUTER)
+  model.hintTalk = S_HINT_TALK_CARDPUTER;
+  model.hintMenu = S_HINT_MENU_CARDPUTER;
+#elif defined(GEIST_BOARD_STICKCPLUS2)
+  model.hintTalk = S_HINT_TALK_STICK;
+  model.hintMenu = S_HINT_MENU_STICK;
+#else
+  model.hintTalk = S_HOLD_TO_TALK;
+  model.hintMenu = S_DOUBLE_FOR_MENU;
+#endif
 
   // Each step is printed on the screen as well, so a hang is easy to locate.
   bool fbOk = display::begin();
@@ -832,6 +952,7 @@ void setup() {
     display::status("ERROR: no memory for the screen buffer (PSRAM?)");
     for (;;) delay(1000);
   }
+  setScreenSize(display::width(), display::height());
   canvas = new Canvas(display::framebuffer(), SCREEN_W, SCREEN_H);
 
   display::status("2/6 leds");
@@ -840,12 +961,11 @@ void setup() {
   input::begin();
 
   display::status("4/6 memory");
+  // With PSRAM the whole recording is buffered and sent at once; without it
+  // (Cardputer) the audio is streamed to the server while you speak.
   wavBuf = (uint8_t*)heap_caps_malloc(44 + kMaxSamples * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!wavBuf) {
-    display::status("ERROR: no PSRAM for the recording buffer");
-    for (;;) delay(1000);
-  }
-  recSamples = (int16_t*)(wavBuf + 44);
+  recSamples = wavBuf ? (int16_t*)(wavBuf + 44) : nullptr;
+  Serial.printf("[audio] %s\n", wavBuf ? "buffered recording (PSRAM)" : "streaming recording");
 
   display::status("5/6 audio");
   audio::begin();
@@ -905,7 +1025,7 @@ void loop() {
   if (now - lastPoll > 10000) {
     lastPoll = now;
     bool wifi = net::wifiConnected();
-    int bat = readBatteryPct();
+    int bat = power::batteryPercent();
     bool needServer;
     {
       ModelLock l;

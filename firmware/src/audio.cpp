@@ -1,3 +1,7 @@
+// LilyGO T-Embed implementation (see hal_m5.cpp for the M5Stack boards).
+#include "board.h"
+#if GEIST_HAL_LILYGO
+
 #include "audio.h"
 
 #include <Arduino.h>
@@ -212,3 +216,5 @@ void setVolume(uint8_t percent) { g_volume = percent > 100 ? 100 : percent; }
 uint8_t volume() { return g_volume; }
 
 }  // namespace audio
+
+#endif  // GEIST_HAL_LILYGO

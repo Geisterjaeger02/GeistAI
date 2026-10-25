@@ -7,8 +7,10 @@ namespace display {
 // Powers the panel, allocates the framebuffer. Returns false if out of memory.
 bool begin();
 
-// RGB565 framebuffer, 320x170, native byte order.
+// RGB565 framebuffer in landscape, native byte order.
 uint16_t* framebuffer();
+int width();
+int height();
 
 // Push the whole framebuffer to the panel.
 void present();

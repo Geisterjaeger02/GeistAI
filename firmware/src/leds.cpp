@@ -5,6 +5,14 @@
 
 #include "board.h"
 
+#if LED_COUNT == 0
+namespace leds {
+void begin() {}
+void update(geist::Mode, float, uint32_t) {}
+void off() {}
+}  // namespace leds
+#else
+
 #if LED_APA102
 #include <APA102.h>
 static APA102<PIN_LED_DATA, PIN_LED_CLK> strip;
@@ -112,3 +120,5 @@ void off() {
 }
 
 }  // namespace leds
+
+#endif  // LED_COUNT

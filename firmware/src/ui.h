@@ -21,8 +21,11 @@ constexpr uint16_t USER_TEXT = rgb(150, 250, 255);
 constexpr uint16_t ERR_RED = rgb(196, 0, 70);
 }  // namespace theme
 
-constexpr int SCREEN_W = 320;
-constexpr int SCREEN_H = 170;
+// Screen size in landscape. 320x170 (T-Embed) by default; 240x135 on the
+// M5Stack Cardputer / StickC Plus2. Call setScreenSize() once at startup.
+extern int SCREEN_W;
+extern int SCREEN_H;
+void setScreenSize(int w, int h);
 
 enum class Mode : uint8_t {
   Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard
@@ -43,6 +46,8 @@ struct UiModel {
   uint32_t timeMs = 0;      // animation clock
   uint32_t modeSinceMs = 0; // when the current mode started
   uint8_t uiLang = 0;
+  uint8_t hintTalk = 0;  // Str ids of the two idle hints (board specific)
+  uint8_t hintMenu = 1;
 
   // boot
   float bootProgress = 0.f;  // 0..1
@@ -78,6 +83,7 @@ struct UiModel {
   int kbIndex = 0;
   int kbPage = 0;
   bool kbShift = false;
+  bool kbPhysical = false;  // device has a real keyboard (Cardputer): no on-screen keys
 
   // power button: 0 = not held, 0..1 = progress towards switching off
   float powerHold = 0.f;

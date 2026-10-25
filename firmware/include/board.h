@@ -7,6 +7,9 @@
 #if defined(GEIST_BOARD_TEMBED)
 // ---------------------------------------------------------- original T-Embed (ESP32-S3)
 #define BOARD_NAME "T-Embed"
+#define GEIST_HAL_LILYGO 1
+#define BOARD_HAS_KEYBOARD 0
+#define BOARD_HAS_SPEAKER 1
 
 #define PIN_POWER_ON 46
 
@@ -54,6 +57,9 @@
 #elif defined(GEIST_BOARD_TEMBED_CC1101)
 // ---------------------------------------------------------- T-Embed CC1101 (ESP32-S3)
 #define BOARD_NAME "T-Embed CC1101"
+#define GEIST_HAL_LILYGO 1
+#define BOARD_HAS_KEYBOARD 0
+#define BOARD_HAS_SPEAKER 1
 
 #define PIN_POWER_ON 15  // BOARD_PWR_EN
 
@@ -97,6 +103,40 @@
 #define PIN_I2C_SCL 18
 #define PIN_BAT_ADC -1  // battery is read through the BQ27220 gauge (TODO)
 
+#elif defined(GEIST_BOARD_CARDPUTER)
+// ---------------------------------------------------------- M5Stack Cardputer (StampS3, no PSRAM)
+// Display, keyboard, mic and speaker are handled by M5Unified / M5Cardputer.
+#define BOARD_NAME "Cardputer"
+#define GEIST_HAL_M5 1
+#define BOARD_HAS_KEYBOARD 1
+#define BOARD_HAS_SPEAKER 1
+#define PIN_POWER_ON -1
+#define PIN_BTN_BACK -1
+#define LED_WS2812 1
+#define PIN_LED_DATA 21
+#define LED_COUNT 1
+
+#elif defined(GEIST_BOARD_STICKCPLUS2)
+// ---------------------------------------------------------- M5StickC Plus2 (ESP32-PICO-V3-02)
+// Buttons A / B / PWR, PDM mic; only a buzzer, so voice replies default to off.
+#define BOARD_NAME "StickC Plus2"
+#define GEIST_HAL_M5 1
+#define BOARD_HAS_KEYBOARD 0
+#define BOARD_HAS_SPEAKER 0
+#define PIN_POWER_ON -1
+#define PIN_BTN_BACK -1
+#define LED_COUNT 0
+
 #else
-#error "Select a board: build with -DGEIST_BOARD_TEMBED or -DGEIST_BOARD_TEMBED_CC1101"
+#error "Select a board: build with one of the PlatformIO environments in platformio.ini"
+#endif
+
+#ifndef LED_COUNT
+#define LED_COUNT 0
+#endif
+#ifndef GEIST_HAL_LILYGO
+#define GEIST_HAL_LILYGO 0
+#endif
+#ifndef GEIST_HAL_M5
+#define GEIST_HAL_M5 0
 #endif

@@ -27,6 +27,9 @@ int keyCount();
 const Key& key(int page, int index);
 Rect keyRect(int index);
 
+// Adapts the key grid to the screen (320x170 default, 240x135 on M5 devices).
+void setLayout(int screenW, int screenH);
+
 // Label shown on the PAGE key for the given current page ("123", "áé", "abc").
 const char* pageKeyLabel(int page);
 

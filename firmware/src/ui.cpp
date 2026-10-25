@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "assets/fonts.h"
@@ -18,12 +19,13 @@ namespace {
 
 constexpr int TOPBAR_H = 26;
 constexpr int VIEW_Y = 28;
-constexpr int VIEW_H = 118;
-constexpr int BOTTOM_Y = 148;
+int VIEW_H = 118;             // depends on the screen size, see setScreenSize()
+int BOTTOM_Y = 148;
 constexpr int BUBBLE_PAD_X = 8;
 constexpr int BUBBLE_PAD_Y = 4;
 constexpr int BUBBLE_GAP = 6;
-constexpr int BUBBLE_MAX_TEXT_W = 232;
+int BUBBLE_MAX_TEXT_W = 232;
+bool SMALL = false;           // 240x135 class screens
 constexpr int MAX_LINES = 48;
 
 float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
@@ -36,16 +38,16 @@ uint8_t a8(float v) { return (uint8_t)(clamp01(v) * 255.f + 0.5f); }
 
 // ------------------------------------------------------------ background
 // The gradient + soft light blobs are pre-rendered once and copied per frame.
-std::vector<uint16_t> g_bgCache;
+uint16_t* g_bgCache = nullptr;
+size_t g_bgSize = 0;
+bool g_bgFailed = false;
 
-void buildBackground(int w, int h) {
-  g_bgCache.assign((size_t)w * h, 0);
-  Canvas bg(g_bgCache.data(), w, h);
+void paintBackground(Canvas& bg, int w, int h) {
   bg.vGradient(0, 0, w, h, BG_TOP, BG_BOTTOM);
   // soft "neon" light blobs
   for (int i = 0; i < 6; i++) {
-    bg.fillCircle(285.f, -10.f, 30.f + i * 18.f, SNOW, 14);
-    bg.fillCircle(10.f, 190.f, 30.f + i * 16.f, rgb(0, 160, 220), 10);
+    bg.fillCircle(w - 35.f, -10.f, 30.f + i * 18.f, SNOW, 14);
+    bg.fillCircle(10.f, h + 20.f, 30.f + i * 16.f, rgb(0, 160, 220), 10);
   }
   // fine diagonal sheen lines
   for (int x = -h; x < w; x += 22) {
@@ -56,9 +58,24 @@ void buildBackground(int w, int h) {
   }
 }
 
+// The background is pre-rendered once and copied per frame. Boards without
+// spare RAM (no PSRAM) skip the cache and draw a plain gradient instead.
 void drawBackground(Canvas& c) {
-  if (g_bgCache.size() != (size_t)c.width() * c.height()) buildBackground(c.width(), c.height());
-  memcpy(c.data(), g_bgCache.data(), g_bgCache.size() * sizeof(uint16_t));
+  size_t n = (size_t)c.width() * c.height();
+  if (!g_bgCache && !g_bgFailed) {
+    g_bgCache = (uint16_t*)malloc(n * sizeof(uint16_t));
+    if (g_bgCache) {
+      Canvas bg(g_bgCache, c.width(), c.height());
+      paintBackground(bg, c.width(), c.height());
+      g_bgSize = n;
+    } else {
+      g_bgFailed = true;
+    }
+  }
+  if (g_bgCache && g_bgSize == n)
+    memcpy(c.data(), g_bgCache, n * sizeof(uint16_t));
+  else
+    c.vGradient(0, 0, c.width(), c.height(), BG_TOP, BG_BOTTOM);
 }
 
 void drawIcon(Canvas& c, int x, int y, const uint8_t* mask, int w, int h, uint16_t col,
@@ -182,16 +199,19 @@ void drawChat(Canvas& c, const UiModel& m) {
 }
 
 void drawWelcome(Canvas& c, const UiModel& m) {
-  int lx = (SCREEN_W - logo_mid_w) / 2;
-  int ly = VIEW_Y + 4;
-  float pulse = 0.75f + 0.25f * sinf(m.timeMs / 900.f);
-  c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, a8(0.85f * pulse));
-  c.drawMask8(lx, ly, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
+  int y = VIEW_Y + 8;
+  if (!SMALL) {  // on small screens the top bar logo is enough
+    int lx = (SCREEN_W - logo_mid_w) / 2;
+    int ly = VIEW_Y + 4;
+    float pulse = 0.75f + 0.25f * sinf(m.timeMs / 900.f);
+    c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, a8(0.85f * pulse));
+    c.drawMask8(lx, ly, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
+    y = ly + logo_mid_h + 2;
+  }
 
   static Line lines[4];
   const char* text = tr(m.uiLang, S_WELCOME);
-  int n = wrapText(font_body, text, 260, lines, 4);
-  int y = ly + logo_mid_h + 2;
+  int n = wrapText(font_body, text, SCREEN_W - 60, lines, 4);
   for (int i = 0; i < n; i++) {
     int w = textWidth(font_body, text + lines[i].start, lines[i].len);
     c.drawText(font_body, (SCREEN_W - w) / 2, y + i * font_body.lineHeight, text + lines[i].start,
@@ -225,7 +245,7 @@ void drawBottomBar(Canvas& c, const UiModel& m) {
   switch (m.mode) {
     case Mode::Idle: {
       bool alt = ((m.timeMs / 4000) % 2) == 1;
-      const char* hint = tr(m.uiLang, alt ? S_DOUBLE_FOR_MENU : S_HOLD_TO_TALK);
+      const char* hint = tr(m.uiLang, (Str)(alt ? m.hintMenu : m.hintTalk));
       int w = textWidth(font_small, hint) + 14 + icon_mic_w + 4;
       int x = (SCREEN_W - w) / 2;
       drawPill(c, x, y, w, INK, 30);
@@ -298,13 +318,13 @@ void drawListeningOverlay(Canvas& c, const UiModel& m) {
 
   float t = (m.timeMs - m.modeSinceMs) / 1000.f;
   float appear = easeOutCubic(t / 0.25f);
-  float cx = SCREEN_W / 2.f, cy = VIEW_Y + 50.f;
+  float cx = SCREEN_W / 2.f, cy = VIEW_Y + (SMALL ? 32.f : 50.f);
   float lvl = clamp01(m.micLevel);
 
   // expanding ripples
   for (int i = 0; i < 3; i++) {
     float ph = fmodf(t * 0.9f + i / 3.f, 1.f);
-    c.ring(cx, cy, 30.f + ph * 34.f, 2.f, INK, a8((1.f - ph) * 0.35f * appear));
+    c.ring(cx, cy, 30.f + ph * (SMALL ? 14.f : 34.f), 2.f, INK, a8((1.f - ph) * 0.35f * appear));
   }
   // level halo
   c.fillCircle(cx, cy, (31.f + lvl * 16.f) * appear, SNOW, 110);
@@ -312,8 +332,8 @@ void drawListeningOverlay(Canvas& c, const UiModel& m) {
   c.drawMask8((int)(cx - icon_mic_big_w / 2), (int)(cy - icon_mic_big_h / 2), icon_mic_big_mask,
               icon_mic_big_w, icon_mic_big_h, USER_TEXT, a8(appear));
 
-  c.drawTextCentered(font_title, SCREEN_W / 2, VIEW_Y + 88, tr(m.uiLang, S_LISTENING), INK,
-                     a8(appear));
+  c.drawTextCentered(font_title, SCREEN_W / 2, VIEW_Y + VIEW_H - (SMALL ? 22 : 30),
+                     tr(m.uiLang, S_LISTENING), INK, a8(appear));
 }
 
 // ------------------------------------------------------------ boot
@@ -321,20 +341,24 @@ void drawBoot(Canvas& c, const UiModel& m) {
   drawBackground(c);
   float t = (m.timeMs - m.modeSinceMs) / 1000.f;
 
-  int lx = (SCREEN_W - logo_big_w) / 2;
-  int ly = 58 - logo_big_h / 2;
+  // the big wordmark on 320 px screens, the medium one on 240 px screens
+  const uint8_t* mask = SMALL ? logo_mid_mask : logo_big_mask;
+  const uint8_t* glowMask = SMALL ? logo_mid_glow : logo_big_glow;
+  const int lw = SMALL ? logo_mid_w : logo_big_w, lh = SMALL ? logo_mid_h : logo_big_h;
+  int lx = (SCREEN_W - lw) / 2;
+  int ly = (SMALL ? 44 : 58) - lh / 2;
 
   // handwriting reveal from left to right
   float reveal = easeOutCubic(t / 1.5f);
-  int revealX = lx + (int)(logo_big_w * reveal);
+  int revealX = lx + (int)(lw * reveal);
 
   float glow = clamp01((t - 0.6f) / 1.0f);
   float pulse = 0.8f + 0.2f * sinf(t * 2.6f);
-  c.drawMask8(lx, ly, logo_big_glow, logo_big_w, logo_big_h, SNOW, a8(glow * pulse), revealX);
-  c.drawMask8(lx, ly, logo_big_mask, logo_big_w, logo_big_h, INK, 255, revealX);
+  c.drawMask8(lx, ly, glowMask, lw, lh, SNOW, a8(glow * pulse), revealX);
+  c.drawMask8(lx, ly, mask, lw, lh, INK, 255, revealX);
 
   if (reveal < 0.995f) {  // the glowing "pen tip"
-    float py = ly + logo_big_h * 0.55f + sinf(t * 18.f) * 6.f;
+    float py = ly + lh * 0.55f + sinf(t * 18.f) * (SMALL ? 4.f : 6.f);
     c.fillCircle((float)revealX, py, 9.f, SNOW, 70);
     c.fillCircle((float)revealX, py, 3.5f, SNOW, 230);
   }
@@ -342,12 +366,12 @@ void drawBoot(Canvas& c, const UiModel& m) {
   // tagline fades in
   float tag = clamp01((t - 1.2f) / 0.6f);
   if (tag > 0) {
-    c.drawTextCentered(font_small, SCREEN_W / 2, ly + logo_big_h - 13, "your local AI companion",
-                       INK_SOFT, a8(tag));
+    c.drawTextCentered(font_small, SCREEN_W / 2, ly + lh - (SMALL ? 12 : 13),
+                       "your local AI companion", INK_SOFT, a8(tag));
   }
 
   // progress bar
-  int bw = 168, bx = (SCREEN_W - bw) / 2, by = 136;
+  int bw = SMALL ? 140 : 168, bx = (SCREEN_W - bw) / 2, by = SCREEN_H - 34;
   c.fillRoundRect(bx, by, bw, 5, 2, INK, 40);
   int fw = (int)(bw * clamp01(m.bootProgress));
   if (fw > 4) c.fillRoundRect(bx, by, fw, 5, 2, INK, 230);
@@ -358,7 +382,8 @@ void drawBoot(Canvas& c, const UiModel& m) {
   c.resetClip();
 
   c.drawTextCentered(font_small, SCREEN_W / 2, by + 10, m.bootStatus.c_str(), INK_SOFT);
-  if (!m.version.empty()) c.drawTextRight(font_small, SCREEN_W - 6, SCREEN_H - 15, m.version.c_str(), INK, 90);
+  if (!m.version.empty() && !SMALL)
+    c.drawTextRight(font_small, SCREEN_W - 6, SCREEN_H - 15, m.version.c_str(), INK, 90);
 }
 
 // ------------------------------------------------------------ settings
@@ -366,11 +391,12 @@ void drawSettings(Canvas& c, const UiModel& m) {
   drawBackground(c);
   drawIcon(c, 10, 8, icon_gear_mask, icon_gear_w, icon_gear_h, INK);
   c.drawText(font_title, 30, 3, tr(m.uiLang, S_SETTINGS), INK);
-  c.drawMask8(SCREEN_W - 8 - logo_small_w, 1, logo_small_mask, logo_small_w, logo_small_h,
-              INK, 120);
+  if (!SMALL)
+    c.drawMask8(SCREEN_W - 8 - logo_small_w, 1, logo_small_mask, logo_small_w, logo_small_h,
+                INK, 120);
   c.hLine(8, TOPBAR_H + 1, SCREEN_W - 16, INK, 40);
 
-  const int rowH = 26, top = 32, visible = 5;
+  const int rowH = SMALL ? 24 : 26, top = 32, visible = (SCREEN_H - top) / rowH;
   int n = (int)m.settings.size();
   int first = m.settingsIndex - visible / 2;
   if (first > n - visible) first = n - visible;
@@ -396,8 +422,9 @@ void drawSettings(Canvas& c, const UiModel& m) {
   }
   // scroll hint
   if (n > visible) {
-    int barH = VIEW_H * visible / n;
-    int barY = top + (VIEW_H + 12 - barH) * first / (n - visible);
+    int area = SCREEN_H - top - 4;
+    int barH = area * visible / n;
+    int barY = top + (area - barH) * first / (n - visible);
     c.fillRoundRect(SCREEN_W - 4, barY, 3, barH, 1, INK, 70);
   }
 }
@@ -414,19 +441,20 @@ void drawPowerIcon(Canvas& c, float cx, float cy, float r, uint16_t col, uint8_t
 void drawPowerHold(Canvas& c, const UiModel& m) {
   float p = clamp01(m.powerHold);
   c.blendRect(0, 0, SCREEN_W, SCREEN_H, BG_TOP, 238);
-  float cx = SCREEN_W / 2.f, cy = 70.f;
+  float cx = SCREEN_W / 2.f, cy = SCREEN_H * 0.41f;
   c.ring(cx, cy, 34.f, 6.f, INK, 40);
   c.arc(cx, cy, 34.f, 6.f, -1.5708f, -1.5708f + 6.2832f * p, INK, 255);
   drawPowerIcon(c, cx, cy, 13.f, INK, 255);
-  c.drawTextCentered(font_body, SCREEN_W / 2, 118, tr(m.uiLang, S_HOLD_TO_POWER_OFF), INK);
+  c.drawTextCentered(font_body, SCREEN_W / 2, (int)(cy + 44), tr(m.uiLang, S_HOLD_TO_POWER_OFF), INK);
 }
 
 void drawOff(Canvas& c, const UiModel& m) {
   drawBackground(c);
   int lx = (SCREEN_W - logo_mid_w) / 2;
-  c.drawMask8(lx, 22, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, 200);
-  c.drawMask8(lx, 22, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
-  c.drawTextCentered(font_title, SCREEN_W / 2, 22 + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
+  int ly = (SCREEN_H - logo_mid_h - 26) / 2;
+  c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, 200);
+  c.drawMask8(lx, ly, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
+  c.drawTextCentered(font_title, SCREEN_W / 2, ly + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
 }
 
 // ------------------------------------------------------------ keyboard
@@ -434,17 +462,19 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
   drawBackground(c);
 
   // text field (shows the end of the text, at most 2 lines)
-  const int fx = 6, fy = 4, fw = SCREEN_W - 12, fh = 38;
+  const int fx = 6, fy = 4, fw = SCREEN_W - 12;
+  const int fh = m.kbPhysical ? SCREEN_H - 34 : (SMALL ? 22 : 38);
+  const int maxLines = m.kbPhysical ? (fh - 4) / 17 : (SMALL ? 1 : 2);
   c.fillRoundRect(fx, fy, fw, fh, 10, SNOW, 185);
   const char* text = m.kbText.c_str();
   bool blink = (m.timeMs / 500) % 2 == 0;
   if (m.kbText.empty()) {
-    c.drawText(font_body, fx + 10, fy + 10, tr(m.uiLang, S_TYPE_PLACEHOLDER), INK_SOFT, 200);
-    if (blink) c.fillRect(fx + 8, fy + 10, 2, 17, INK);
+    c.drawText(font_body, fx + 10, fy + 3, tr(m.uiLang, S_TYPE_PLACEHOLDER), INK_SOFT, 200);
+    if (blink) c.fillRect(fx + 8, fy + 3, 2, 17, INK);
   } else {
     static Line lines[32];
     int n = wrapText(font_body, text, fw - 22, lines, 32);
-    int first = n > 2 ? n - 2 : 0;
+    int first = n > maxLines ? n - maxLines : 0;
     int y = fy + 2;
     int endX = fx + 10;
     for (int i = first; i < n; i++, y += 17) {
@@ -453,6 +483,12 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
     // a trailing space isn't part of the wrapped line, so nudge the cursor
     if (!m.kbText.empty() && m.kbText.back() == ' ') endX += 4;
     if (blink) c.fillRect(endX + 1, y - 17 + 1, 2, 16, INK);
+  }
+
+  if (m.kbPhysical) {  // Cardputer: real keyboard, just show a hint
+    c.drawTextCentered(font_small, SCREEN_W / 2, SCREEN_H - 22, "Enter: send \xC2\xB7 Esc: close",
+                       INK_SOFT);
+    return;
   }
 
   // keys
@@ -500,6 +536,22 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
 }  // namespace
 
 // ------------------------------------------------------------ public
+int SCREEN_W = 320;
+int SCREEN_H = 170;
+
+void setScreenSize(int w, int h) {
+  SCREEN_W = w;
+  SCREEN_H = h;
+  SMALL = w < 300;
+  VIEW_H = h - 52;
+  BOTTOM_Y = h - 22;
+  BUBBLE_MAX_TEXT_W = w - 88;
+  kb::setLayout(w, h);
+  free(g_bgCache);
+  g_bgCache = nullptr;
+  g_bgFailed = false;
+}
+
 int chatViewportHeight() { return VIEW_H; }
 
 int chatContentHeight(const UiModel& m) {
