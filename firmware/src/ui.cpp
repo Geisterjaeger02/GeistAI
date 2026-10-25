@@ -266,14 +266,23 @@ void drawBottomBar(Canvas& c, const UiModel& m) {
       break;
     }
     case Mode::Error: {
+      // Wrapped over up to 3 lines so long details (address, reason) stay readable.
       const char* t = m.errorText.empty() ? tr(m.uiLang, S_ERR_GENERIC) : m.errorText.c_str();
-      int w = textWidth(font_small, t) + 20;
-      if (w > SCREEN_W - 16) w = SCREEN_W - 16;
-      int x = (SCREEN_W - w) / 2;
-      drawPill(c, x, y, w, ERR_RED, 240);
-      c.setClip(x + 6, y, w - 12, 19);
-      c.drawText(font_small, x + 10, y + 3, t, SNOW);
-      c.resetClip();
+      static Line lines[3];
+      int n = wrapText(font_small, t, SCREEN_W - 40, lines, 3);
+      int maxW = 0;
+      for (int i = 0; i < n; i++) {
+        int lw = textWidth(font_small, t + lines[i].start, lines[i].len);
+        if (lw > maxW) maxW = lw;
+      }
+      int w = maxW + 20, h = n * font_small.lineHeight + 6;
+      int x = (SCREEN_W - w) / 2, top = SCREEN_H - 3 - h;
+      c.fillRoundRect(x, top, w, h, 9, ERR_RED, 240);
+      for (int i = 0; i < n; i++) {
+        int lw = textWidth(font_small, t + lines[i].start, lines[i].len);
+        c.drawText(font_small, (SCREEN_W - lw) / 2, top + 3 + i * font_small.lineHeight,
+                   t + lines[i].start, SNOW, 255, lines[i].len);
+      }
       break;
     }
     default:

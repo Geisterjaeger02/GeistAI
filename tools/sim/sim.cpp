@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
   shot("07_idle_chat");
 
   // Error
-  m.mode = Mode::Error; m.errorText = tr(m.uiLang, S_ERR_SERVER);
+  m.mode = Mode::Error; m.errorText = std::string(tr(m.uiLang, S_ERR_SERVER)) + " \xC2\xB7 192.168.178.42:8765 \xC2\xB7 connection refused";
   shot("08_error");
 
   // Settings
