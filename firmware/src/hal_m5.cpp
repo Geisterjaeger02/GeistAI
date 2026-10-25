@@ -158,14 +158,14 @@ void scanKeyboard(uint32_t now) {
     if (contains(lastKeys, k)) continue;
     KeyValue_t v = kb.getKeyValue(k);
     uint8_t first = (uint8_t)v.value_first;
-    if (st.fn) {
-      switch ((uint8_t)v.value_third) {
-        case KEY_UP: push(EventType::Rotate, now, -1); break;
-        case KEY_DOWN: push(EventType::Rotate, now, 1); break;
-        case KEY_LEFT: push(EventType::Rotate, now, -1); break;
-        case KEY_RIGHT: push(EventType::Rotate, now, 1); break;
-        case KEY_ESCAPE: push(EventType::Escape, now); break;
-        case KEY_DELETE: push(EventType::Backspace, now); break;
+    if (st.fn) {  // Fn layer: ; . , / are the arrow keys, ` is Esc, Del deletes
+      switch (first) {
+        case ';': push(EventType::Rotate, now, -1); break;
+        case '.': push(EventType::Rotate, now, 1); break;
+        case ',': push(EventType::Rotate, now, -1); break;
+        case '/': push(EventType::Rotate, now, 1); break;
+        case '`': push(EventType::Escape, now); break;
+        case KEY_BACKSPACE: push(EventType::Backspace, now); break;
         default: break;
       }
       continue;
@@ -182,7 +182,7 @@ void scanKeyboard(uint32_t now) {
       case KEY_OPT:
         break;  // handled separately / modifiers
       default: {
-        char c = (st.shift || st.ctrl || kb.capslocked()) ? v.value_second : v.value_first;
+        char c = (st.shift || st.ctrl) ? v.value_second : v.value_first;
         if (c == '`' && !st.shift) {  // the top-left key doubles as Esc
           push(EventType::Escape, now);
           break;
