@@ -23,16 +23,37 @@ OUT = ROOT / "firmware" / "src" / "assets"
 SCRIPT_TTF = FONTS / "DancingScript.ttf"
 UI_TTF = FONTS / "Inter.ttf"
 
-# Characters the device can display. Covers German, English, Spanish, French,
-# Italian, Portuguese, Dutch, Polish, Czech, Turkish ... (Latin-1 + Latin Ext-A)
+# Characters the device can display: Latin (German, English, Spanish, French,
+# Polish, Czech, Turkish, Romanian, Vietnamese ...), Greek and Cyrillic (Russian,
+# Ukrainian, Serbian). Other scripts are transliterated by the server.
+# Keep in sync with _RANGES in server/geist_server/textutil.py.
 CODEPOINTS = (
     list(range(0x20, 0x7F))
     + list(range(0xA0, 0x100))
     + list(range(0x100, 0x180))
+    + [0x1A0, 0x1A1, 0x1AF, 0x1B0]          # Vietnamese ơ ư
+    + list(range(0x218, 0x21C))             # Romanian ș ț
+    + list(range(0x384, 0x3CF))             # Greek
+    + list(range(0x400, 0x460)) + [0x490, 0x491]  # Cyrillic
+    + list(range(0x1EA0, 0x1EFA))           # Vietnamese
     + [0x2013, 0x2014, 0x2018, 0x2019, 0x201A, 0x201C, 0x201D, 0x201E,
        0x2022, 0x2026, 0x20AC, 0x2039, 0x203A, 0x00B7]
 )
 CODEPOINTS = sorted(set(CODEPOINTS))
+
+
+def _font_has(path) -> set[int]:
+    """Code points the font really contains (no empty boxes for gaps in a range)."""
+    try:
+        from fontTools.ttLib import TTFont
+
+        return set(TTFont(str(path)).getBestCmap())
+    except Exception:  # fontTools missing: keep everything
+        return set(CODEPOINTS)
+
+
+_HAVE = _font_has(UI_TTF)
+CODEPOINTS = [cp for cp in CODEPOINTS if cp in _HAVE or cp < 0x80]
 
 
 def c_array(name: str, data: bytes, ctype: str = "uint8_t", per_line: int = 24) -> str:

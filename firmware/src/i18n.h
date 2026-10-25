@@ -111,6 +111,13 @@ static const SpeechLang kSpeechLangs[] = {
     {"auto", "Auto"},       {"de", "Deutsch"},   {"en", "English"},  {"es", "Español"},
     {"fr", "Français"},     {"it", "Italiano"},  {"pt", "Português"}, {"nl", "Nederlands"},
     {"pl", "Polski"},       {"tr", "Türkçe"},
+    // added in v0.2 (keep the order: the setting is stored as an index)
+    {"ru", "Русский"},      {"uk", "Українська"}, {"cs", "Čeština"},  {"sk", "Slovenčina"},
+    {"sv", "Svenska"},      {"da", "Dansk"},      {"no", "Norsk"},    {"fi", "Suomi"},
+    {"hu", "Magyar"},       {"ro", "Română"},     {"el", "Ελληνικά"}, {"ca", "Català"},
+    {"sr", "Srpski"},       {"vi", "Tiếng Việt"}, {"id", "Indonesia"},
+    // scripts the screen can't draw: named in Latin letters
+    {"zh", "Chinese"},      {"ar", "Arabic"},     {"fa", "Farsi"},    {"hi", "Hindi"},
 };
 static const uint8_t kSpeechLangCount = sizeof(kSpeechLangs) / sizeof(kSpeechLangs[0]);
 

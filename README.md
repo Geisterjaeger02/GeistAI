@@ -10,8 +10,13 @@ the voice all run on your own computer, so nothing leaves your home network.
 
 - Cursive **GeistAI** boot animation (the name "writes itself" with a glowing pen tip)
 - Neon-cyan interface with chat bubbles, live mic meter, "thinking" and "speaking" states
-- **Multilingual:** talk in German, English, Spanish, French, Italian, Portuguese, Dutch, Polish or
-  Turkish. The language is detected automatically and the answer comes back in the same language.
+- **Multilingual:** talk in 28 languages: German, English, Spanish, French, Italian, Portuguese,
+  Dutch, Polish, Turkish, Russian, Ukrainian, Czech, Slovak, Swedish, Danish, Norwegian, Finnish,
+  Hungarian, Romanian, Greek, Catalan, Serbian, Arabic, Persian, Hindi, Chinese, Vietnamese and
+  Indonesian. The language is detected automatically and the answer comes back in the same
+  language, spoken by a matching voice (downloaded the first time you use a language). The
+  screen shows Latin, Cyrillic and Greek; Chinese, Arabic, Persian and Hindi appear in Latin
+  letters. Years are spoken the way people say them ("neunzehnhundertsechsunddreißig").
   The menu itself is available in EN / DE / ES / FR.
 - **Live answers from the internet:** weather and forecasts (Open-Meteo), web and news search
   (DuckDuckGo) and Wikipedia. No accounts or API keys needed

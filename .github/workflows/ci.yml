@@ -85,7 +85,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pillow
+      - run: pip install pillow fonttools
       - run: python tools/gen_assets.py && python tools/sim/render.py
       - uses: actions/upload-artifact@v4
         with:

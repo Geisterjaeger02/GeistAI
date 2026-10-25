@@ -114,13 +114,23 @@ static void renderAll(const std::string& out) {
   m.kbPhysical = true; m.kbPage = 0; m.kbShift = false; m.kbText = "Hola, ¿qué tal?";
   shot("14_keyboard_physical");
 
+  // More languages: Cyrillic, Greek, Vietnamese and a transliterated answer
+  m.kbPhysical = false; m.kbText = "";
+  m.mode = Mode::Idle; m.timeMs = 5000; m.langBadge = "RU";
+  m.chat.clear();
+  m.chat.push_back({true, "Какая погода завтра в Москве?"});
+  m.chat.push_back({false, "Завтра в Москве от 3 до 8 °C, облачно и небольшой дождь."});
+  m.chat.push_back({true, "Γεια σου! Xin chào, bạn khỏe không?"});
+  m.chat.push_back({false, "ni hao, wo shi GeistAI. jin tian tian qi hen hao!"});
+  shot("15_languages");
+
   // Wi-Fi setup hotspot
   m.kbPhysical = false; m.kbText = "";
   m.mode = Mode::Setup;
   m.setupSsid = "GeistAI-3F2A"; m.setupPass = "48210375"; m.setupUrl = "192.168.4.1";
-  shot("15_wifi_setup");
+  shot("16_wifi_setup");
   m.setupSaved = true;
-  shot("16_wifi_saved");
+  shot("17_wifi_saved");
 }
 
 int main(int argc, char** argv) {
