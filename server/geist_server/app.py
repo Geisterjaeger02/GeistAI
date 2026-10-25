@@ -126,11 +126,13 @@ def announce(port: int):
     )
     zc = Zeroconf()
     try:
-        zc.register_service(info)
+        zc.register_service(info, allow_name_change=True)
         log.info("announced via mDNS as _geistai._tcp on %s:%d", ip, port)
         return zc
-    except Exception:
-        log.exception("mDNS announcement failed")
+    except Exception as e:  # noqa: BLE001 - mDNS is a convenience, never fatal
+        log.warning("mDNS announcement failed (%s: %s). The server still works - put "
+                    "GEIST_SERVER_URL=\"http://%s:%d\" into the device's secrets.h.",
+                    type(e).__name__, e, ip, port)
         zc.close()
         return None
 
