@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 
 from .config import Config
@@ -37,6 +39,19 @@ INTERNET_OFF = "- Be honest: you have no live internet access, so say so for new
 
 class ChatError(RuntimeError):
     pass
+
+
+@dataclass
+class ChatOptions:
+    """Per-question choices from the device settings."""
+    cloud: bool = False     # answer with ChatGPT instead of the local model
+    name: str = ""          # the assistant's nickname ("" = ASSISTANT_NAME)
+    used: str = ""          # filled in: "cloud" or "local"
+
+
+def clean_name(name: str) -> str:
+    name = re.sub(r"[\x00-\x1f<>{}\[\]\\]", "", name or "").strip()
+    return name[:30]
 
 
 class Conversations:
@@ -77,24 +92,36 @@ class LLMClient:
         if tools is None and cfg.tools_enabled:
             tools = Tools(cfg.home_location, cfg.tools_timeout_s)
         self.tools = tools
+        self._openai_quirks: set[str] = set()  # learned from error replies, see _openai_body
 
-    def system_prompt(self, language: str) -> str:
+    @property
+    def cloud_ready(self) -> bool:
+        return bool(self.cfg.openai_api_key)
+
+    def system_prompt(self, language: str, name: str = "") -> str:
         try:
             from zoneinfo import ZoneInfo
 
             now = datetime.now(ZoneInfo(self.cfg.timezone))
         except Exception:
             now = datetime.now()
-        return SYSTEM_PROMPT.format(name=self.cfg.assistant_name, language=language_name(language),
+        return SYSTEM_PROMPT.format(name=clean_name(name) or self.cfg.assistant_name,
+                                    language=language_name(language),
                                     internet=INTERNET_ON if self.tools else INTERNET_OFF,
                                     now=now.strftime("%A, %Y-%m-%d %H:%M"))
 
-    def reply(self, device: str, text: str, language: str) -> str:
+    def reply(self, device: str, text: str, language: str,
+              options: ChatOptions | None = None) -> str:
+        options = options or ChatOptions()
+        cloud = options.cloud and self.cloud_ready
+        if options.cloud and not cloud:
+            log.warning("ChatGPT was chosen on the device, but OPENAI_API_KEY is not set - "
+                        "answering with the local model")
         history = self.memory.history(device)
         content = text
         if self.tools:
             t0 = time.perf_counter()
-            call = self.route(history, text)
+            call = self.route(history, text, cloud)
             result = self.tools.run(call, language, question=text)
             if result:
                 log.info("[%s] %s %s -> %d chars in %.1fs", device, call.tool,
@@ -102,14 +129,23 @@ class LLMClient:
                          time.perf_counter() - t0)
                 content = (f"{text}\n\n[Live data, fetched just now for this question]\n"
                            f"{result.text}")
-        messages = [{"role": "system", "content": self.system_prompt(language)}]
+        messages = [{"role": "system", "content": self.system_prompt(language, options.name)}]
         messages += history
         messages.append({"role": "user", "content": content})
-        answer = self._complete(messages).strip()
+        answer = ""
+        if cloud:
+            try:
+                answer = self._complete(messages, cloud=True).strip()
+                options.used = "cloud"
+            except ChatError as e:  # no credit, network down ... the local model still works
+                log.warning("ChatGPT failed (%s) - answering with the local model", e)
+        if not options.used:
+            answer = self._complete(messages).strip()
+            options.used = "local"
         self.memory.add(device, text, answer)  # remember the question, not the fetched data
         return answer
 
-    def route(self, history: list[dict], text: str) -> ToolCall:
+    def route(self, history: list[dict], text: str, cloud: bool = False) -> ToolCall:
         """Asks the model (in JSON mode) whether this message needs a live lookup."""
         recent = history[-4:]
         convo = "".join(f"{m['role'].capitalize()}: {m['content'][:300]}\n" for m in recent)
@@ -119,7 +155,8 @@ class LLMClient:
         try:
             raw = self._complete([{"role": "system", "content": prompt},
                                   {"role": "user", "content": user}],
-                                 max_tokens=80, json_schema=ROUTER_SCHEMA, temperature=0.0)
+                                 max_tokens=80, json_schema=ROUTER_SCHEMA, temperature=0.0,
+                                 cloud=cloud)
         except ChatError as e:
             log.warning("tool routing failed: %s", e)
             return ToolCall()
@@ -131,10 +168,14 @@ class LLMClient:
 
     # ------------------------------------------------------------------ backends
     def _complete(self, messages: list[dict], max_tokens: int | None = None,
-                  json_schema: dict | None = None, temperature: float | None = None) -> str:
+                  json_schema: dict | None = None, temperature: float | None = None,
+                  cloud: bool = False) -> str:
         import httpx
 
         cfg = self.cfg
+        if cloud:
+            return self._openai(messages, max_tokens or cfg.llm_max_tokens, json_schema,
+                                cfg.llm_temperature if temperature is None else temperature)
         try:
             if cfg.llm_backend == "ollama":
                 body = {
@@ -184,3 +225,57 @@ class LLMClient:
             raise ChatError(f"LLM error {e.response.status_code}: {body}") from e
         except (KeyError, IndexError, ValueError) as e:
             raise ChatError("LLM returned an unexpected response") from e
+
+    # ------------------------------------------------------------------ ChatGPT
+    def _openai_body(self, messages, max_tokens, json_schema, temperature) -> dict:
+        model = self.cfg.openai_model
+        q = self._openai_quirks
+        reasoning = bool(re.match(r"(gpt-5|o\d)", model))  # think first: slower, other params
+        body = {"model": model, "messages": messages}
+        if reasoning or "max_completion_tokens" in q:
+            # reasoning tokens count too, so leave room for them
+            body["max_completion_tokens"] = max(max_tokens * 4, 1200) if reasoning else max_tokens
+        else:
+            body["max_tokens"] = max_tokens
+        if not reasoning and "no_temperature" not in q:
+            body["temperature"] = temperature
+        if reasoning and "no_reasoning_effort" not in q:
+            body["reasoning_effort"] = "minimal"
+        if json_schema and "no_schema" not in q:
+            body["response_format"] = {"type": "json_schema",
+                                       "json_schema": {"name": "decision", "schema": json_schema}}
+        return body
+
+    def _openai(self, messages, max_tokens, json_schema, temperature) -> str:
+        import httpx
+
+        cfg = self.cfg
+        headers = {"Authorization": f"Bearer {cfg.openai_api_key}"}
+        url = f"{cfg.openai_url}/v1/chat/completions"
+        for _ in range(4):  # each retry fixes one parameter the model didn't accept
+            body = self._openai_body(messages, max_tokens, json_schema, temperature)
+            try:
+                r = httpx.post(url, timeout=60, headers=headers, json=body)
+            except httpx.HTTPError as e:
+                raise ChatError(f"ChatGPT not reachable: {type(e).__name__}") from e
+            if r.status_code == 400:
+                err = r.text.lower()
+                fix = ("max_completion_tokens" if "max_tokens" in err else
+                       "no_temperature" if "temperature" in err else
+                       "no_reasoning_effort" if "reasoning_effort" in err else
+                       "no_schema" if "response_format" in err or "json_schema" in err else None)
+                if fix and fix not in self._openai_quirks:
+                    log.info("ChatGPT: adjusting request (%s)", fix)
+                    self._openai_quirks.add(fix)
+                    continue
+            if r.status_code == 401:
+                raise ChatError("OpenAI API key is not valid")
+            if r.status_code == 429:
+                raise ChatError("OpenAI limit reached or no credit left")
+            if r.status_code >= 400:
+                raise ChatError(f"ChatGPT error {r.status_code}: {r.text[:200]}")
+            try:
+                return r.json()["choices"][0]["message"]["content"] or ""
+            except (KeyError, IndexError, ValueError) as e:
+                raise ChatError("ChatGPT returned an unexpected response") from e
+        raise ChatError("ChatGPT rejected the request")

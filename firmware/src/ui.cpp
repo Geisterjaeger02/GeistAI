@@ -48,7 +48,7 @@ void paintBackground(Canvas& bg, int w, int h) {
   // soft "neon" light blobs
   for (int i = 0; i < 6; i++) {
     bg.fillCircle(w - 35.f, -10.f, 30.f + i * 18.f, SNOW, 14);
-    bg.fillCircle(10.f, h + 20.f, 30.f + i * 16.f, rgb(0, 160, 220), 10);
+    bg.fillCircle(10.f, h + 20.f, 30.f + i * 16.f, BLOB, 10);
   }
   // fine diagonal sheen lines
   for (int x = -h; x < w; x += 22) {
@@ -211,7 +211,9 @@ void drawWelcome(Canvas& c, const UiModel& m) {
   }
 
   static Line lines[4];
-  const char* text = tr(m.uiLang, S_WELCOME);
+  static char buf[200];
+  snprintf(buf, sizeof(buf), tr(m.uiLang, S_WELCOME), m.assistantName.c_str());
+  const char* text = buf;
   int n = wrapText(font_body, text, SCREEN_W - 60, lines, 4);
   for (int i = 0; i < n; i++) {
     int w = textWidth(font_body, text + lines[i].start, lines[i].len);
@@ -558,7 +560,8 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
   const char* text = m.kbText.c_str();
   bool blink = (m.timeMs / 500) % 2 == 0;
   if (m.kbText.empty()) {
-    c.drawText(font_body, fx + 10, fy + 3, tr(m.uiLang, S_TYPE_PLACEHOLDER), INK_SOFT, 200);
+    c.drawText(font_body, fx + 10, fy + 3,
+               tr(m.uiLang, m.kbNameMode ? S_NAME_PLACEHOLDER : S_TYPE_PLACEHOLDER), INK_SOFT, 200);
     if (blink) c.fillRect(fx + 8, fy + 3, 2, 17, INK);
   } else {
     static Line lines[32];
@@ -575,7 +578,8 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
   }
 
   if (m.kbPhysical) {  // Cardputer: real keyboard, just show a hint
-    c.drawTextCentered(font_small, SCREEN_W / 2, SCREEN_H - 22, "Enter: send \xC2\xB7 Esc: close",
+    c.drawTextCentered(font_small, SCREEN_W / 2, SCREEN_H - 22,
+                       m.kbNameMode ? "Enter: OK \xC2\xB7 Esc: cancel" : "Enter: send \xC2\xB7 Esc: close",
                        INK_SOFT);
     return;
   }
@@ -625,6 +629,51 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
 }  // namespace
 
 // ------------------------------------------------------------ public
+const ThemeColors kThemes[THEME_COUNT] = {
+    // bgTop               bgBottom            ink               inkSoft
+    // userText            blob                LED
+    {rgb(40, 246, 255), rgb(0, 206, 240), rgb(0, 24, 36), rgb(0, 86, 108),
+     rgb(150, 250, 255), rgb(0, 160, 220), 0, 230, 255},     // neon cyan
+    {rgb(255, 128, 222), rgb(240, 70, 186), rgb(42, 0, 32), rgb(112, 12, 84),
+     rgb(255, 196, 240), rgb(200, 30, 150), 255, 40, 180},   // neon pink
+    {rgb(160, 255, 100), rgb(70, 230, 100), rgb(0, 38, 12), rgb(22, 98, 40),
+     rgb(196, 255, 160), rgb(20, 180, 70), 60, 255, 60},     // neon green
+    {rgb(196, 160, 255), rgb(148, 100, 250), rgb(22, 0, 54), rgb(72, 34, 132),
+     rgb(222, 204, 255), rgb(104, 56, 222), 140, 60, 255},   // violet
+    {rgb(255, 206, 96), rgb(255, 136, 64), rgb(52, 16, 0), rgb(128, 56, 10),
+     rgb(255, 224, 168), rgb(240, 96, 32), 255, 120, 0},     // sunset
+    {rgb(238, 249, 255), rgb(194, 226, 255), rgb(10, 30, 60), rgb(62, 92, 132),
+     rgb(204, 232, 255), rgb(124, 172, 240), 180, 220, 255}, // ice
+};
+
+namespace theme {
+uint16_t BG_TOP = kThemes[0].bgTop;
+uint16_t BG_BOTTOM = kThemes[0].bgBottom;
+uint16_t INK = kThemes[0].ink;
+uint16_t INK_SOFT = kThemes[0].inkSoft;
+uint16_t USER_TEXT = kThemes[0].userText;
+uint16_t BLOB = kThemes[0].blob;
+}  // namespace theme
+
+static int g_theme = 0;
+
+void setTheme(int index) {
+  if (index < 0 || index >= THEME_COUNT) index = 0;
+  g_theme = index;
+  const ThemeColors& t = kThemes[index];
+  theme::BG_TOP = t.bgTop;
+  theme::BG_BOTTOM = t.bgBottom;
+  theme::INK = t.ink;
+  theme::INK_SOFT = t.inkSoft;
+  theme::USER_TEXT = t.userText;
+  theme::BLOB = t.blob;
+  free(g_bgCache);  // repaint the background in the new colours
+  g_bgCache = nullptr;
+  g_bgFailed = false;
+}
+
+int currentTheme() { return g_theme; }
+
 int SCREEN_W = 320;
 int SCREEN_H = 170;
 

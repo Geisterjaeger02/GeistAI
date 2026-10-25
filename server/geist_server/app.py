@@ -17,6 +17,7 @@ from . import audio as wavutil
 from . import __version__
 from .config import Config
 from .llm import ChatError, LLMClient
+from .llm import ChatOptions
 from .pipeline import Assistant
 from .stt import WhisperSTT
 from .tts import PiperTTS
@@ -60,6 +61,9 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
                      cfg.home_location or "not set - add HOME_LOCATION=<your town> to .env")
         else:
             log.info("internet lookups off (INTERNET=0)")
+        if cfg.openai_api_key:
+            log.info("ChatGPT available (%s) - choose it on the device: Settings -> AI model",
+                     cfg.openai_model)
         yield
         if zc:
             await asyncio.to_thread(zc.close)
@@ -79,10 +83,12 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
             "llm": f"{cfg.llm_backend}:{cfg.llm_model}",
             "voices": tts.available_languages() if hasattr(tts, "available_languages") else [],
             "internet": cfg.tools_enabled,
+            "cloud": bool(cfg.openai_api_key),
         }
 
     @app.post("/api/chat")
-    async def chat(request: Request, device: str = "unknown", lang: str = "auto", tts: int = 1):
+    async def chat(request: Request, device: str = "unknown", lang: str = "auto", tts: int = 1,
+                   ai: str = "local", name: str = ""):
         try:
             data = await request.body()  # also handles chunked uploads (streaming devices)
         except ClientDisconnect:
@@ -95,16 +101,20 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
             rate, channels = wavutil.parse_l16_params(content_type)
             data = wavutil.pcm16_to_wav(data, rate, channels)
         try:
-            result = await run_in_threadpool(assistant.handle_audio, data, device, lang, bool(tts))
+            options = ChatOptions(cloud=ai == "cloud", name=name)
+            result = await run_in_threadpool(assistant.handle_audio, data, device, lang, bool(tts),
+                                             options)
         except ChatError as e:
             log.error("chat failed: %s", e)
             return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
         return result.to_json()
 
     @app.post("/api/text")
-    def text(body: TextIn, device: str = "web", lang: str = "auto", tts: int = 0):
+    def text(body: TextIn, device: str = "web", lang: str = "auto", tts: int = 0,
+             ai: str = "local", name: str = ""):
+        options = ChatOptions(cloud=ai == "cloud", name=name)
         try:
-            return assistant.handle_text(body.text, device, lang, bool(tts)).to_json()
+            return assistant.handle_text(body.text, device, lang, bool(tts), options).to_json()
         except ChatError as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
 

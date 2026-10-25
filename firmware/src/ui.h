@@ -11,13 +11,27 @@
 namespace geist {
 
 // ---------------------------------------------------------------- theme
+// Colour themes, chosen in the settings. "Neon cyan" is the original look.
+struct ThemeColors {
+  uint16_t bgTop, bgBottom;  // background gradient
+  uint16_t ink, inkSoft;     // text, secondary text (also the user's bubble)
+  uint16_t userText;         // text inside the user's bubble
+  uint16_t blob;             // soft light in the background
+  uint8_t ledR, ledG, ledB;  // LED colour
+};
+constexpr int THEME_COUNT = 6;
+extern const ThemeColors kThemes[THEME_COUNT];
+void setTheme(int index);  // also redraws the cached background
+int currentTheme();
+
 namespace theme {
-constexpr uint16_t BG_TOP = rgb(40, 246, 255);    // neon cyan
-constexpr uint16_t BG_BOTTOM = rgb(0, 206, 240);  // slightly deeper cyan
-constexpr uint16_t INK = rgb(0, 24, 36);          // deep navy text
-constexpr uint16_t INK_SOFT = rgb(0, 86, 108);    // secondary text
+extern uint16_t BG_TOP;
+extern uint16_t BG_BOTTOM;
+extern uint16_t INK;
+extern uint16_t INK_SOFT;
+extern uint16_t USER_TEXT;
+extern uint16_t BLOB;
 constexpr uint16_t SNOW = rgb(255, 255, 255);
-constexpr uint16_t USER_TEXT = rgb(150, 250, 255);
 constexpr uint16_t ERR_RED = rgb(196, 0, 70);
 }  // namespace theme
 
@@ -84,12 +98,16 @@ struct UiModel {
   int kbPage = 0;
   bool kbShift = false;
   bool kbPhysical = false;  // device has a real keyboard (Cardputer): no on-screen keys
+  bool kbNameMode = false;  // editing the assistant's name instead of a message
 
   // Wi-Fi setup hotspot
   std::string setupSsid;
   std::string setupPass;
   std::string setupUrl;
   bool setupSaved = false;
+
+  // the assistant's name (settings), e.g. in the welcome text
+  std::string assistantName = "GeistAI";
 
   // power button: 0 = not held, 0..1 = progress towards switching off
   float powerHold = 0.f;

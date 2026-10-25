@@ -53,6 +53,13 @@ class AppTests(unittest.TestCase):
         r = self.client.post("/api/text?lang=auto", json={"text": "Hola, ¿qué tal?"})
         self.assertEqual(r.json()["language"], "es")
 
+    def test_assistant_options(self):
+        r = self.client.post("/api/text?lang=de&ai=cloud&name=Luna", json={"text": "Hallo"})
+        self.assertEqual(r.json()["ai"], "cloud")
+        opts = self.assistant.llm.options
+        self.assertEqual((opts.cloud, opts.name), (True, "Luna"))
+        self.assertIn("cloud", self.client.get("/health").json())
+
 
 if __name__ == "__main__":
     unittest.main()

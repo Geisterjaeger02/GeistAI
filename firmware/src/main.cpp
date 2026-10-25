@@ -55,7 +55,16 @@ struct Settings {
   uint8_t uiLang = DEFAULT_UI_LANG;
   uint8_t volume = DEFAULT_VOLUME;
   bool voiceReplies = BOARD_HAS_SPEAKER;
+  uint8_t theme = 0;       // colour theme (index into geist::kThemes)
+  std::string nickname;    // the assistant's name, empty = "GeistAI"
+  bool cloud = false;      // answer with ChatGPT (needs an OpenAI key on the server)
 } settings;
+
+constexpr size_t NICKNAME_MAX = 20;  // bytes (UTF-8)
+
+static std::string assistantName() {
+  return settings.nickname.empty() ? std::string("GeistAI") : settings.nickname;
+}
 
 static Preferences prefs;
 
@@ -179,7 +188,11 @@ static void loadSettings() {
   settings.uiLang = prefs.getUChar("ulang", DEFAULT_UI_LANG);
   settings.volume = prefs.getUChar("vol", DEFAULT_VOLUME);
   settings.voiceReplies = prefs.getBool("voice", BOARD_HAS_SPEAKER);
+  settings.theme = prefs.getUChar("theme", 0);
+  settings.nickname = prefs.isKey("nick") ? prefs.getString("nick", "").c_str() : "";
+  settings.cloud = prefs.getBool("cloud", false);
   prefs.end();
+  if (settings.theme >= THEME_COUNT) settings.theme = 0;
   if (settings.speechLang >= kSpeechLangCount) settings.speechLang = 0;
   if (settings.uiLang >= UI_LANG_COUNT) settings.uiLang = UI_EN;
 }
@@ -190,7 +203,11 @@ static void saveSettings() {
   prefs.putUChar("ulang", settings.uiLang);
   prefs.putUChar("vol", settings.volume);
   prefs.putBool("voice", settings.voiceReplies);
+  prefs.putUChar("theme", settings.theme);
+  prefs.putString("nick", settings.nickname.c_str());
+  prefs.putBool("cloud", settings.cloud);
   prefs.end();
+  net::setAssistant(settings.cloud, settings.nickname);
 }
 
 // ----------------------------------------------------------------------------
@@ -435,6 +452,9 @@ enum SettingRow : uint8_t {
   ROW_UI_LANG,
   ROW_VOLUME,
   ROW_VOICE,
+  ROW_THEME,
+  ROW_NAME,
+  ROW_AI,
   ROW_CLEAR,
   ROW_WIFI,
   ROW_INFO,
@@ -450,12 +470,18 @@ static void refreshSettingsLocked() {
   std::string info = net::wifiConnected() ? std::string(WiFi.localIP().toString().c_str()) : "-";
   std::string wifiName = provision::hasWifi() ? provision::creds().ssid : "-";
   if (wifiName.size() > 14) wifiName = wifiName.substr(0, 13) + "\xE2\x80\xA6";
+  std::string aiValue = tr(L, settings.cloud ? S_AI_CLOUD : S_AI_LOCAL);
+  if (settings.cloud && model.serverOk && !net::cloudAvailable())
+    aiValue += std::string(" (") + tr(L, S_NOT_SET_UP) + ")";
   model.uiLang = L;
   model.settings = {
       {tr(L, S_SPEECH_LANG), kSpeechLangs[settings.speechLang].label},
       {tr(L, S_UI_LANG), kUiLangNames[settings.uiLang]},
       {tr(L, S_VOLUME), vol},
       {tr(L, S_VOICE_REPLY), tr(L, settings.voiceReplies ? S_ON : S_OFF)},
+      {tr(L, S_COLOR), kThemeNames[L][settings.theme]},
+      {tr(L, S_AI_NAME), assistantName()},
+      {tr(L, S_AI_BRAIN), aiValue},
       {tr(L, S_CLEAR_CHAT), chatCleared ? tr(L, S_DONE) : ""},
       {tr(L, S_WIFI_SETUP), wifiName},
       {tr(L, S_DEVICE_INFO), info},
@@ -503,21 +529,34 @@ static void settingsRotate(int delta) {
       audio::setVolume(settings.volume);
       break;
     }
+    case ROW_THEME:  // the whole screen changes colour while you turn
+      settings.theme = (settings.theme + THEME_COUNT + (delta > 0 ? 1 : -1)) % THEME_COUNT;
+      setTheme(settings.theme);
+      break;
   }
   refreshSettingsLocked();
 }
 
 static void startSetup();
+static void editName();
 
 static void settingsClick() {
-  bool close = false, setup = false;
+  bool close = false, setup = false, name = false;
   {
     ModelLock l;
     switch (model.settingsIndex) {
       case ROW_SPEECH_LANG:
       case ROW_UI_LANG:
       case ROW_VOLUME:
+      case ROW_THEME:
         model.settingsEditing = !model.settingsEditing;
+        break;
+      case ROW_NAME:
+        name = true;
+        break;
+      case ROW_AI:
+        settings.cloud = !settings.cloud;
+        net::setAssistant(settings.cloud, settings.nickname);
         break;
       case ROW_VOICE:
         settings.voiceReplies = !settings.voiceReplies;
@@ -541,6 +580,7 @@ static void settingsClick() {
     refreshSettingsLocked();
   }
   if (close) closeSettings();
+  if (name) editName();
   if (setup) {
     saveSettings();
     startSetup();
@@ -626,6 +666,43 @@ static void startTurn() {
 static void cancelTurn() { cancelSeq = turnSeq; }
 
 // ---------------------------------------------------------------- keyboard
+static std::string draftStash;  // the unsent message while the name is being edited
+
+// Settings -> AI name: the keyboard edits the name instead of a message.
+static void editName() {
+  ModelLock l;
+  draftStash = model.kbText;
+  model.kbText = settings.nickname;
+  model.kbNameMode = true;
+  model.kbShift = model.kbText.empty();
+  model.kbPage = kb::LETTERS;
+  if (model.kbIndex < 0 || model.kbIndex >= kb::keyCount()) model.kbIndex = 0;
+  setModeLocked(Mode::Keyboard);
+}
+
+// Leaves name editing; save = keep the typed name. Call with the model locked.
+static void finishNameLocked(bool save) {
+  if (save) {
+    std::string n = model.kbText;
+    while (!n.empty() && n.back() == ' ') n.pop_back();
+    while (!n.empty() && n.front() == ' ') n.erase(0, 1);
+    while (n.size() > NICKNAME_MAX) {  // cut on a character boundary
+      n.pop_back();
+      while (!n.empty() && ((uint8_t)n.back() & 0xC0) == 0x80) n.pop_back();
+      if (!n.empty() && ((uint8_t)n.back() & 0x80)) n.pop_back();
+    }
+    settings.nickname = n == "GeistAI" ? "" : n;
+    model.assistantName = assistantName();
+    net::setAssistant(settings.cloud, settings.nickname);
+  }
+  model.kbText = draftStash;
+  draftStash.clear();
+  model.kbNameMode = false;
+  refreshSettingsLocked();
+  model.settingsIndex = ROW_NAME;
+  setModeLocked(Mode::Settings);
+}
+
 static void openKeyboard() {
   ModelLock l;
   model.kbShift = model.kbText.empty();  // capital letter at the start
@@ -649,7 +726,8 @@ static void keyboardPress() {
     std::string& t = model.kbText;
     switch (k.action) {
       case kb::CHAR:
-        if (t.size() < (size_t)kb::TEXT_MAX) t += model.kbShift ? k.upper : k.lower;
+        if (t.size() < (model.kbNameMode ? NICKNAME_MAX : (size_t)kb::TEXT_MAX))
+          t += model.kbShift ? k.upper : k.lower;
         model.kbShift = false;
         break;
       case kb::SPACE:
@@ -666,12 +744,18 @@ static void keyboardPress() {
         if (t.empty()) model.kbShift = true;
         break;
       case kb::SETTINGS:
-        toSettings = true;
+        if (model.kbNameMode) finishNameLocked(false);
+        else toSettings = true;
         break;
       case kb::CLOSE:
-        setModeLocked(Mode::Idle);
+        if (model.kbNameMode) finishNameLocked(false);
+        else setModeLocked(Mode::Idle);
         break;
       case kb::SEND: {
+        if (model.kbNameMode) {
+          finishNameLocked(true);
+          break;
+        }
         while (!t.empty() && t.back() == ' ') t.pop_back();
         if (t.empty()) break;
         pendingText = t;
@@ -774,6 +858,10 @@ static void onButtonUp(const input::Event& ev) {
 static void sendTypedText() {
   {
     ModelLock l;
+    if (model.kbNameMode) {
+      finishNameLocked(true);
+      return;
+    }
     std::string& t = model.kbText;
     while (!t.empty() && t.back() == ' ') t.pop_back();
     if (t.empty()) return;
@@ -820,7 +908,10 @@ static void onEscape() {
     closeSettings();
   else if (m == Mode::Setup && !setupSavedAt)
     cancelSetup();
-  else if (m == Mode::Keyboard || m == Mode::Error)
+  else if (m == Mode::Keyboard && model.kbNameMode) {
+    ModelLock l;
+    finishNameLocked(false);
+  } else if (m == Mode::Keyboard || m == Mode::Error)
     setMode(Mode::Idle);
   else if (m == Mode::Speaking)
     playStop = true;
@@ -831,7 +922,7 @@ static void updateHold(uint32_t now) {
   bool down = input::buttonIsDown();
   if (pressStartedTurn && !turnVisible && down && now - pressAt >= HOLD_THRESHOLD_MS)
     turnVisible = true;  // the worker now shows "listening"
-  if (kbPressPending && down && now - kbPressAt >= KB_HOLD_TO_TALK_MS) {
+  if (kbPressPending && down && now - kbPressAt >= KB_HOLD_TO_TALK_MS && !model.kbNameMode) {
     kbPressPending = false;  // held in the keyboard: talk instead (recording starts now)
     startTurn();
     turnVisible = true;
@@ -901,12 +992,16 @@ static void handleInput() {
           model.powerHold = 0.f;
         }
         if (!wasPressed || ev.heldMs >= POWER_HOLD_SHOW_MS) break;  // long hold cancelled
-        if (currentMode() == Mode::Settings)
+        if (currentMode() == Mode::Settings) {
           closeSettings();
-        else if (currentMode() == Mode::Setup)
+        } else if (currentMode() == Mode::Setup) {
           cancelSetup();
-        else if (currentMode() != Mode::Boot)
+        } else if (currentMode() == Mode::Keyboard && model.kbNameMode) {
+          ModelLock l;
+          finishNameLocked(false);
+        } else if (currentMode() != Mode::Boot) {
           openSettings();
+        }
         break;
       }
       default:
@@ -1028,6 +1123,9 @@ void setup() {
   cmdQueue = xQueueCreate(4, sizeof(Command));
 
   loadSettings();
+  setTheme(settings.theme);
+  net::setAssistant(settings.cloud, settings.nickname);
+  model.assistantName = assistantName();
   model.uiLang = settings.uiLang;
   model.kbPhysical = BOARD_HAS_KEYBOARD;
 #if defined(GEIST_BOARD_CARDPUTER)

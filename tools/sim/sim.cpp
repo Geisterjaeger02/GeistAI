@@ -91,6 +91,9 @@ static void renderAll(const std::string& out) {
       {tr(m.uiLang, S_UI_LANG), "Deutsch"},
       {tr(m.uiLang, S_VOLUME), "70 %"},
       {tr(m.uiLang, S_VOICE_REPLY), tr(m.uiLang, S_ON)},
+      {tr(m.uiLang, S_COLOR), kThemeNames[m.uiLang][0]},
+      {tr(m.uiLang, S_AI_NAME), "Luna"},
+      {tr(m.uiLang, S_AI_BRAIN), "ChatGPT"},
       {tr(m.uiLang, S_CLEAR_CHAT), ""},
       {tr(m.uiLang, S_DEVICE_INFO), ""},
       {tr(m.uiLang, S_BACK), ""},
@@ -123,6 +126,26 @@ static void renderAll(const std::string& out) {
   m.chat.push_back({true, "Γεια σου! Xin chào, bạn khỏe không?"});
   m.chat.push_back({false, "ni hao, wo shi GeistAI. jin tian tian qi hen hao!"});
   shot("15_languages");
+
+  // Colour themes and a renamed assistant
+  m.chat.clear(); m.langBadge = "AUTO"; m.assistantName = "Luna";
+  for (int t = 1; t < THEME_COUNT; t++) {
+    setTheme(t);
+    m.mode = Mode::Idle; m.timeMs = 1000;
+    if (t == 1) {
+      shot("15b_theme_pink_welcome");
+      continue;
+    }
+    m.chat = {{true, "Wie heißt du?"}, {false, "Ich bin Luna, deine Assistentin. Frag mich was!"}};
+    char name[40];
+    snprintf(name, sizeof(name), "15%c_theme_%d", 'b' + t, t);
+    shot(name);
+    m.chat.clear();
+  }
+  setTheme(0);
+  m.mode = Mode::Keyboard; m.kbNameMode = true; m.kbText = "Luna"; m.kbIndex = 3;
+  shot("15h_name_keyboard");
+  m.kbNameMode = false; m.kbText = ""; m.assistantName = "GeistAI";
 
   // Wi-Fi setup hotspot
   m.kbPhysical = false; m.kbText = "";

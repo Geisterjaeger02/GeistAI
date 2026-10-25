@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--home", help="your town for weather questions")
     ap.add_argument("--voices", help="languages to download voices for, e.g. de,en,es")
     ap.add_argument("--speak-on-pc", choices=("0", "1"))
+    ap.add_argument("--openai-key", help="OpenAI API key for ChatGPT ('-' removes it)")
     ap.add_argument("--skip-downloads", action="store_true")
     args = ap.parse_args(argv)
 
@@ -128,6 +129,28 @@ def main(argv: list[str] | None = None) -> int:
             "Also play the answers on this PC's speakers? (useful for devices without a speaker)",
             env.get("SPEAK_ON_PC", "0") == "1", args.yes) else "0"
     set_env(env_path, "SPEAK_ON_PC", speak)
+
+    key = args.openai_key
+    if key is None and not args.yes and sys.stdin.isatty():
+        have = bool(env.get("OPENAI_API_KEY"))
+        print("\nOptional: ChatGPT. With an OpenAI API key you can switch the device to ChatGPT")
+        print("(Settings -> AI model). Costs a little per question, see platform.openai.com.")
+        prompt = ("OpenAI API key (Enter = keep the saved one, '-' = remove): " if have else
+                  "OpenAI API key (Enter = skip): ")
+        import getpass
+
+        try:
+            key = getpass.getpass(prompt).strip()  # not shown while typing / pasting
+        except (EOFError, KeyboardInterrupt):
+            key = ""
+        if not key:
+            key = None
+    if key is not None:
+        key = "" if key == "-" else key
+        if key and not key.startswith("sk-"):
+            print("  That doesn't look like an OpenAI key (they start with sk-). Saved anyway.")
+        set_env(env_path, "OPENAI_API_KEY", key)
+        print("  ChatGPT is " + ("set up." if key else "off."))
 
     voices = args.voices or ask("Voices to download (languages)", "de,en,es", args.yes)
     langs = [x.strip().lower() for x in re.split(r"[,\s]+", voices) if x.strip()]

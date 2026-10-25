@@ -16,6 +16,9 @@ namespace {
 
 std::string g_server;
 std::string g_lastError;
+bool g_cloudReady = false;
+bool g_useCloud = false;
+std::string g_name;
 
 void noteHttpError(int code) {
   g_lastError = code > 0 ? ("HTTP " + std::to_string(code)) : HTTPClient::errorToString(code).c_str();
@@ -56,6 +59,14 @@ bool readExact(WiFiClient* s, uint8_t* dst, size_t n, uint32_t timeoutMs = 5000)
     }
   }
   return true;
+}
+
+// "&ai=cloud&name=Luna" - the user's choices from the settings
+std::string assistantParams() {
+  std::string p;
+  if (g_useCloud) p += "&ai=cloud";
+  if (!g_name.empty()) p += "&name=" + urlEncode(g_name.c_str());
+  return p;
 }
 
 uint32_t le32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
@@ -152,12 +163,24 @@ bool healthCheck() {
     return false;
   }
   int code = http.GET();
+  if (code == 200) {
+    // {"ok":true, ..., "cloud":true} - ChatGPT is set up on the server
+    String body = http.getString();
+    g_cloudReady = body.indexOf("\"cloud\":true") >= 0 || body.indexOf("\"cloud\": true") >= 0;
+  }
   http.end();
   if (code != 200)
     noteHttpError(code);
   else
     g_lastError.clear();
   return code == 200;
+}
+
+bool cloudAvailable() { return g_cloudReady; }
+
+void setAssistant(bool useCloud, const std::string& name) {
+  g_useCloud = useCloud;
+  g_name = name;
 }
 
 // ---------------------------------------------------------------- chat
@@ -243,7 +266,8 @@ bool streamBegin(const char* lang, bool wantVoice) {
   }
   g_stream.setNoDelay(true);
   std::string req = "POST /api/chat?device=" + deviceId() + "&lang=" + urlEncode(lang) +
-                    "&tts=" + (wantVoice ? "1" : "0") + " HTTP/1.1\r\nHost: " + host + ":" +
+                    "&tts=" + (wantVoice ? "1" : "0") + assistantParams() +
+                    " HTTP/1.1\r\nHost: " + host + ":" +
                     std::to_string(port) +
                     "\r\nContent-Type: audio/L16; rate=16000; channels=1\r\n"
                     "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
@@ -320,7 +344,7 @@ static ChatResult postChat(const char* path, const char* contentType, const uint
   }
 
   std::string url = g_server + path + "?device=" + deviceId() + "&lang=" + urlEncode(lang) +
-                    "&tts=" + (wantVoice ? "1" : "0");
+                    "&tts=" + (wantVoice ? "1" : "0") + assistantParams();
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.setConnectTimeout(4000);

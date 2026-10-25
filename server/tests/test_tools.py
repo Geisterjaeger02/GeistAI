@@ -248,7 +248,8 @@ class FakeModelLLM(LLMClient):
         self.router_answer = router_answer
         self.calls = []
 
-    def _complete(self, messages, max_tokens=None, json_schema=None, temperature=None):
+    def _complete(self, messages, max_tokens=None, json_schema=None, temperature=None,
+                  cloud=False):
         self.calls.append((messages, json_schema))
         if json_schema:
             return self.router_answer

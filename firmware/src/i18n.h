@@ -51,6 +51,13 @@ enum Str : uint8_t {
   S_SETUP_OPEN,
   S_SETUP_SAVED,
   S_SETUP_CANCEL,
+  S_COLOR,
+  S_AI_NAME,
+  S_AI_BRAIN,
+  S_AI_LOCAL,
+  S_AI_CLOUD,
+  S_NAME_PLACEHOLDER,
+  S_NOT_SET_UP,
   S_COUNT
 };
 
@@ -58,38 +65,50 @@ static const char* const kStrings[UI_LANG_COUNT][S_COUNT] = {
     // English
     {"Hold to talk · tap to type", "Top button: settings", "Listening…", "Release to send",
      "Tap to send", "Thinking…", "Speaking…", "Click to stop", "Connecting to Wi-Fi…",
-     "Looking for server…", "Starting…", "Ready", "Hi! Hold the knob and just talk to me.",
+     "Looking for server…", "Starting…", "Ready", "Hi, I'm %s! Hold the knob and just talk to me.",
      "Settings", "Speech language", "Menu language", "Volume", "Voice replies", "Clear chat",
      "Back", "On", "Off", "Auto", "No Wi-Fi connection", "Server not reachable",
      "I didn't hear anything", "Something went wrong", "Done", "Device info", "Keep holding to turn off", "See you soon!", "Type a message…", "Hold G0 or Space: talk", "Type to write · Tab: settings", "Hold A: talk · A: type", "B: next · PWR: settings",
-     "Wi-Fi setup", "Scan with your phone", "or join this Wi-Fi:", "Password", "then open", "Saved! Restarting…", "Press to cancel"},
+     "Wi-Fi setup", "Scan with your phone", "or join this Wi-Fi:", "Password", "then open", "Saved! Restarting…", "Press to cancel",
+     "Color", "AI name", "AI model", "Local", "ChatGPT", "Name for your AI…", "not set up"},
     // Deutsch
     {"Halten: sprechen · Tippen: schreiben", "Obere Taste: Einstellungen", "Ich höre zu…",
      "Loslassen zum Senden", "Tippen zum Senden", "Denke nach…", "Spreche…",
      "Klicken zum Stoppen", "Verbinde mit WLAN…", "Suche Server…", "Starte…", "Bereit",
-     "Hallo! Halte den Knopf gedrückt und sprich einfach mit mir.", "Einstellungen",
+     "Hallo, ich bin %s! Halte den Knopf gedrückt und sprich einfach mit mir.", "Einstellungen",
      "Sprache (Sprechen)", "Menüsprache", "Lautstärke", "Sprachantwort", "Chat löschen",
      "Zurück", "An", "Aus", "Auto", "Kein WLAN", "Server nicht erreichbar",
      "Ich habe nichts gehört", "Etwas ist schiefgelaufen", "Fertig", "Geräteinfo", "Halten zum Ausschalten", "Bis bald!", "Nachricht schreiben…", "G0 oder Leertaste halten: sprechen", "Tippen: schreiben · Tab: Menü", "A halten: sprechen · A: schreiben", "B: weiter · PWR: Einstellungen",
-     "WLAN einrichten", "Mit dem Handy scannen", "oder mit WLAN verbinden:", "Passwort", "dann öffnen", "Gespeichert! Neustart…", "Drücken: abbrechen"},
+     "WLAN einrichten", "Mit dem Handy scannen", "oder mit WLAN verbinden:", "Passwort", "dann öffnen", "Gespeichert! Neustart…", "Drücken: abbrechen",
+     "Farbe", "Name der KI", "KI-Modell", "Lokal", "ChatGPT", "Name für deine KI…", "nicht eingerichtet"},
     // Español
     {"Mantén: hablar · Toca: escribir", "Botón superior: ajustes", "Escuchando…", "Suelta para enviar",
      "Toca para enviar", "Pensando…", "Hablando…", "Clic para parar", "Conectando al Wi-Fi…",
      "Buscando servidor…", "Iniciando…", "Listo",
-     "¡Hola! Mantén pulsado el botón y háblame.", "Ajustes", "Idioma de voz",
+     "¡Hola, soy %s! Mantén pulsado el botón y háblame.", "Ajustes", "Idioma de voz",
      "Idioma del menú", "Volumen", "Respuesta por voz", "Borrar chat", "Atrás", "Sí", "No",
      "Auto", "Sin Wi-Fi", "Servidor no disponible", "No he oído nada", "Algo salió mal",
      "Hecho", "Info del dispositivo", "Mantén para apagar", "¡Hasta pronto!", "Escribe un mensaje…", "Mantén G0 o Espacio: hablar", "Escribe · Tab: ajustes", "Mantén A: hablar · A: escribir", "B: siguiente · PWR: ajustes",
-     "Configurar Wi-Fi", "Escanea con el móvil", "o conéctate a:", "Clave", "y abre", "¡Guardado! Reiniciando…", "Pulsa: cancelar"},
+     "Configurar Wi-Fi", "Escanea con el móvil", "o conéctate a:", "Clave", "y abre", "¡Guardado! Reiniciando…", "Pulsa: cancelar",
+     "Color", "Nombre de la IA", "Modelo de IA", "Local", "ChatGPT", "Nombre para tu IA…", "no configurado"},
     // Français
     {"Maintiens : parler · Touche : écrire", "Bouton du haut : réglages", "J'écoute…",
      "Relâche pour envoyer", "Touche pour envoyer", "Je réfléchis…", "Je parle…",
      "Clic pour arrêter", "Connexion au Wi-Fi…", "Recherche du serveur…", "Démarrage…", "Prêt",
-     "Salut ! Maintiens le bouton et parle-moi.", "Réglages", "Langue parlée",
+     "Salut, je suis %s ! Maintiens le bouton et parle-moi.", "Réglages", "Langue parlée",
      "Langue du menu", "Volume", "Réponse vocale", "Effacer le chat", "Retour", "Oui", "Non",
      "Auto", "Pas de Wi-Fi", "Serveur injoignable", "Je n'ai rien entendu",
      "Une erreur est survenue", "Terminé", "Infos appareil", "Maintiens pour éteindre", "À bientôt !", "Écris un message…", "Maintiens G0/Espace : parler", "Écris · Tab : réglages", "Maintiens A : parler · A : écrire", "B : suivant · PWR : réglages",
-     "Config. Wi-Fi", "Scanne avec ton mobile", "ou rejoins ce Wi-Fi :", "Mot de passe", "puis ouvre", "Enregistré ! Redémarrage…", "Appuie : annuler"},
+     "Config. Wi-Fi", "Scanne avec ton mobile", "ou rejoins ce Wi-Fi :", "Mot de passe", "puis ouvre", "Enregistré ! Redémarrage…", "Appuie : annuler",
+     "Couleur", "Nom de l'IA", "Modèle d'IA", "Local", "ChatGPT", "Nom de ton IA…", "non configuré"},
+};
+
+// Names of the colour themes (same order as geist::kThemes in ui.cpp).
+static const char* const kThemeNames[UI_LANG_COUNT][6] = {
+    {"Neon cyan", "Neon pink", "Neon green", "Violet", "Sunset", "Ice"},
+    {"Neon-Cyan", "Neon-Pink", "Neon-Grün", "Violett", "Sonnenuntergang", "Eis"},
+    {"Cian neón", "Rosa neón", "Verde neón", "Violeta", "Atardecer", "Hielo"},
+    {"Cyan néon", "Rose néon", "Vert néon", "Violet", "Coucher de soleil", "Glace"},
 };
 
 static const char* const kUiLangNames[UI_LANG_COUNT] = {"English", "Deutsch", "Español",

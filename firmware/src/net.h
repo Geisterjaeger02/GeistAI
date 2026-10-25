@@ -24,6 +24,12 @@ std::string serverHost();
 
 std::string deviceId();
 
+// Settings sent with every question: use ChatGPT instead of the local model,
+// and the assistant's name ("" = GeistAI).
+void setAssistant(bool useCloud, const std::string& name);
+// The server has an OpenAI key (known after the first health check).
+bool cloudAvailable();
+
 struct ChatResult {
   bool ok = false;
   int httpCode = 0;

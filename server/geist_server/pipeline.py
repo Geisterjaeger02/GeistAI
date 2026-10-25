@@ -25,6 +25,7 @@ class TurnResult:
     language: str = ""
     audio_id: str | None = None
     error: str = ""
+    ai: str = ""          # which model answered: "cloud" (ChatGPT) or "local"
     timings: dict = field(default_factory=dict)
 
     def to_json(self) -> dict:
@@ -35,6 +36,7 @@ class TurnResult:
             "language": self.language,
             "audio": f"/api/audio/{self.audio_id}.wav" if self.audio_id else None,
             "error": self.error,
+            "ai": self.ai,
             "timings": self.timings,
         }
 
@@ -76,7 +78,8 @@ class Assistant:
         lang = (lang or "").strip().lower()
         return None if lang in ("", "auto") else lang
 
-    def handle_audio(self, data: bytes, device: str, lang: str | None, want_voice: bool) -> TurnResult:
+    def handle_audio(self, data: bytes, device: str, lang: str | None, want_voice: bool,
+                     options=None) -> TurnResult:
         t0 = time.perf_counter()
         try:
             pcm, _ = wav.wav_to_float32(data)
@@ -93,14 +96,18 @@ class Assistant:
             return TurnResult(ok=False, error="no_speech", language=tr.language)
         log.info("[%s] heard (%s %.2f): %s", device, tr.language, tr.probability, tr.text)
 
-        result = self.handle_text(tr.text, device, tr.language, want_voice)
+        result = self.handle_text(tr.text, device, tr.language, want_voice, options)
         result.timings["stt"] = round((t_stt - t0) * 1000)
         return result
 
-    def handle_text(self, text: str, device: str, lang: str, want_voice: bool) -> TurnResult:
+    def handle_text(self, text: str, device: str, lang: str, want_voice: bool,
+                    options=None) -> TurnResult:
         lang = self._lang_arg(lang) or guess_language(text)
         t0 = time.perf_counter()
-        raw = self.llm.reply(device, text, lang)
+        if options is None:
+            raw = self.llm.reply(device, text, lang)
+        else:
+            raw = self.llm.reply(device, text, lang, options=options)
         t_llm = time.perf_counter()
         reply = for_display(raw) or "…"
         log.info("[%s] reply: %s", device, reply)
@@ -119,6 +126,7 @@ class Assistant:
             reply=reply,
             language=lang,
             audio_id=audio_id,
+            ai=getattr(options, "used", "") or "local",
             timings={"llm": round((t_llm - t0) * 1000), "tts": round((t_tts - t_llm) * 1000)},
         )
 

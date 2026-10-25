@@ -124,6 +124,13 @@ Wikipedia, or nothing). The server fetches it and the model answers from it, in 
 Only the search words and the place name leave your network, never your voice. `INTERNET=0`
 switches it off.
 
+**ChatGPT (optional):** paste an [OpenAI API key](https://platform.openai.com/api-keys) when the
+setup asks for it (or set `OPENAI_API_KEY` in `.env`). Then choose **Settings → AI model →
+ChatGPT** on the device. Speech recognition and the voice stay on your PC; only the text of your
+question goes to OpenAI. The API is billed per use (separate from a ChatGPT Plus subscription);
+`gpt-4.1-mini`, the default, costs well under a cent per question. If ChatGPT fails (no credit,
+no internet), the local model answers instead.
+
 Using **LM Studio** instead of Ollama? Set `LLM_BACKEND=openai` and `LLM_URL=http://localhost:1234`
 in `.env`.
 
@@ -166,7 +173,8 @@ The on-screen keyboard has three pages: letters (QWERTZ with ä ö ü ß), numbe
 accented letters (á é ñ ç …). ⇧ capitalises the next letter.
 
 **Settings:** speech language (Auto or fixed), menu language, volume, voice replies on/off,
-clear chat, Wi-Fi setup, device info (IP address).
+colour (neon cyan, pink, green, violet, sunset, ice; changes live while you turn), the AI's name
+(it introduces itself with it), AI model (local or ChatGPT), clear chat, Wi-Fi setup, device info.
 
 ## Project layout
 

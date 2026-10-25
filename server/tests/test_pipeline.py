@@ -45,8 +45,11 @@ class FakeLLM:
         self.memory = Conversations(4)
         self.seen = []
 
-    def reply(self, device, text, language):
+    def reply(self, device, text, language, options=None):
         self.seen.append((device, text, language))
+        self.options = options
+        if options is not None:
+            options.used = "cloud" if options.cloud else "local"
         return "**Ich bin GeistAI** 👻 – dein *lokaler* Assistent."
 
 

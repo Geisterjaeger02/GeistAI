@@ -47,7 +47,11 @@ void show() {
 #endif
 }
 
-const RGB C_CYAN{0, 230, 255};
+// the theme's colour (cyan by default)
+RGB accent() {
+  const geist::ThemeColors& t = geist::kThemes[geist::currentTheme()];
+  return RGB{t.ledR, t.ledG, t.ledB};
+}
 const RGB C_WHITE{200, 255, 255};
 const RGB C_RED{255, 0, 50};
 
@@ -74,7 +78,7 @@ void update(geist::Mode mode, float level, uint32_t now) {
       float head = fmodf(t * 1.6f, 1.f) * LED_COUNT;
       for (int i = 0; i < LED_COUNT; i++) {
         float d = fmodf(head - i + LED_COUNT, (float)LED_COUNT);
-        px[i] = scale(C_CYAN, 1.f - d / 3.f);
+        px[i] = scale(accent(), 1.f - d / 3.f);
       }
       break;
     }
@@ -82,25 +86,25 @@ void update(geist::Mode mode, float level, uint32_t now) {
     case geist::Mode::Keyboard:
     case geist::Mode::Settings: {
       float b = 0.06f + 0.06f * (sinf(t * 1.4f) * 0.5f + 0.5f);
-      for (auto& p : px) p = scale(C_CYAN, b);
+      for (auto& p : px) p = scale(accent(), b);
       break;
     }
     case geist::Mode::Listening: {
       float lit = 0.15f + level * 1.4f;
-      for (int i = 0; i < LED_COUNT; i++) px[i] = scale(i % 2 ? C_CYAN : C_WHITE, lit);
+      for (int i = 0; i < LED_COUNT; i++) px[i] = scale(i % 2 ? accent() : C_WHITE, lit);
       break;
     }
     case geist::Mode::Thinking: {
       float head = fmodf(t * 2.4f, 1.f) * LED_COUNT;
       for (int i = 0; i < LED_COUNT; i++) {
         float d = fmodf(head - i + LED_COUNT, (float)LED_COUNT);
-        px[i] = scale(C_CYAN, 0.9f - d / 2.5f);
+        px[i] = scale(accent(), 0.9f - d / 2.5f);
       }
       break;
     }
     case geist::Mode::Speaking: {
       float b = 0.15f + level * 1.2f;
-      for (auto& p : px) p = scale(C_CYAN, b);
+      for (auto& p : px) p = scale(accent(), b);
       break;
     }
     case geist::Mode::Off:

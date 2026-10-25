@@ -101,6 +101,12 @@ class Config:
     llm_max_tokens: int = 220
     llm_keep_alive: str = "2h"         # how long Ollama keeps the model in memory
     llm_context: int = 8192            # tokens; web pages need room
+
+    # Optional cloud model (ChatGPT), chosen per question in the device settings.
+    # Any OpenAI-compatible service works (OPENAI_URL), e.g. Groq or OpenRouter.
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
+    openai_url: str = "https://api.openai.com"
     history_turns: int = 6
     assistant_name: str = "GeistAI"
     timezone: str = "Europe/Berlin"
@@ -140,6 +146,9 @@ class Config:
         cfg.llm_max_tokens = _env_int("LLM_MAX_TOKENS", cfg.llm_max_tokens)
         cfg.llm_keep_alive = _env("LLM_KEEP_ALIVE", cfg.llm_keep_alive)
         cfg.llm_context = _env_int("LLM_CONTEXT", cfg.llm_context)
+        cfg.openai_api_key = _env("OPENAI_API_KEY", cfg.openai_api_key).strip()
+        cfg.openai_model = _env("OPENAI_MODEL", cfg.openai_model).strip() or cfg.openai_model
+        cfg.openai_url = _env("OPENAI_URL", cfg.openai_url).rstrip("/")
         cfg.history_turns = _env_int("HISTORY_TURNS", cfg.history_turns)
         cfg.assistant_name = _env("ASSISTANT_NAME", cfg.assistant_name)
         cfg.timezone = _env("GEIST_TIMEZONE", cfg.timezone)
