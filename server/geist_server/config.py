@@ -81,6 +81,7 @@ class Config:
     voices_dir: Path = Path("voices")
     voices: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_VOICES))
     tts_length_scale: float = 1.0      # >1 = slower speech
+    speak_on_pc: bool = False          # also play replies on this computer's speakers
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -110,6 +111,7 @@ class Config:
 
         cfg.voices_dir = Path(_env("VOICES_DIR", str(cfg.voices_dir)))
         cfg.tts_length_scale = _env_float("TTS_LENGTH_SCALE", cfg.tts_length_scale)
+        cfg.speak_on_pc = _env("SPEAK_ON_PC", "0").lower() in ("1", "true", "yes", "on")
         # Override single voices: VOICE_DE=de_DE-kerstin-low
         for key, value in os.environ.items():
             if key.startswith("VOICE_") and len(key) == 8 and value:

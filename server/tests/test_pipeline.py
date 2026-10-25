@@ -141,6 +141,15 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(r.language, "es")
 
 
+class SpeakOnPcTests(unittest.TestCase):
+    def test_plays_locally_even_without_device_voice(self):
+        played = []
+        a = Assistant(FakeSTT(), FakeLLM(), FakeTTS(), AudioCache(), speak_locally=played.append)
+        r = a.handle_audio(make_wav(1.0), "dev1", "auto", False)
+        self.assertEqual(len(played), 1)
+        self.assertIsNone(r.to_json()["audio"])  # device didn't ask for audio
+
+
 class MemoryTests(unittest.TestCase):
     def test_history_limit_and_reset(self):
         m = Conversations(max_turns=2)

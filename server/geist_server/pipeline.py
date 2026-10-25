@@ -65,9 +65,11 @@ class AudioCache:
 
 
 class Assistant:
-    def __init__(self, stt, llm, tts, cache: AudioCache | None = None):
+    def __init__(self, stt, llm, tts, cache: AudioCache | None = None, speak_locally=None):
         self.stt, self.llm, self.tts = stt, llm, tts
         self.cache = cache or AudioCache()
+        # optional callback(wav_bytes): play replies on the PC's own speakers
+        self.speak_locally = speak_locally
 
     @staticmethod
     def _lang_arg(lang: str | None) -> str | None:
@@ -104,9 +106,11 @@ class Assistant:
         log.info("[%s] reply: %s", device, reply)
 
         audio_id = None
-        if want_voice:
+        if want_voice or self.speak_locally:
             speech = self.tts.synthesize(for_speech(raw), lang)
-            if speech:
+            if speech and self.speak_locally:
+                self.speak_locally(speech)
+            if speech and want_voice:
                 audio_id = self.cache.put(speech)
         t_tts = time.perf_counter()
         return TurnResult(

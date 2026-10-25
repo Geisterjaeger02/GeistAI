@@ -39,7 +39,10 @@ def lan_ip() -> str:
 def create_app(cfg: Config | None = None, assistant: Assistant | None = None) -> FastAPI:
     cfg = cfg or Config.from_env()
     if assistant is None:
-        assistant = Assistant(WhisperSTT(cfg), LLMClient(cfg), PiperTTS(cfg))
+        speak = None
+        if cfg.speak_on_pc:
+            from .localplay import play as speak
+        assistant = Assistant(WhisperSTT(cfg), LLMClient(cfg), PiperTTS(cfg), speak_locally=speak)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
