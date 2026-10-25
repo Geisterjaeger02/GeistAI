@@ -8,6 +8,7 @@
 #include "assets/icons.h"
 #include "assets/logo.h"
 #include "i18n.h"
+#include "keyboard.h"
 
 namespace geist {
 
@@ -428,6 +429,74 @@ void drawOff(Canvas& c, const UiModel& m) {
   c.drawTextCentered(font_title, SCREEN_W / 2, 22 + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
 }
 
+// ------------------------------------------------------------ keyboard
+void drawKeyboard(Canvas& c, const UiModel& m) {
+  drawBackground(c);
+
+  // text field (shows the end of the text, at most 2 lines)
+  const int fx = 6, fy = 4, fw = SCREEN_W - 12, fh = 38;
+  c.fillRoundRect(fx, fy, fw, fh, 10, SNOW, 185);
+  const char* text = m.kbText.c_str();
+  bool blink = (m.timeMs / 500) % 2 == 0;
+  if (m.kbText.empty()) {
+    c.drawText(font_body, fx + 10, fy + 10, tr(m.uiLang, S_TYPE_PLACEHOLDER), INK_SOFT, 200);
+    if (blink) c.fillRect(fx + 8, fy + 10, 2, 17, INK);
+  } else {
+    static Line lines[32];
+    int n = wrapText(font_body, text, fw - 22, lines, 32);
+    int first = n > 2 ? n - 2 : 0;
+    int y = fy + 2;
+    int endX = fx + 10;
+    for (int i = first; i < n; i++, y += 17) {
+      endX = c.drawText(font_body, fx + 10, y, text + lines[i].start, INK, 255, lines[i].len);
+    }
+    // a trailing space isn't part of the wrapped line, so nudge the cursor
+    if (!m.kbText.empty() && m.kbText.back() == ' ') endX += 4;
+    if (blink) c.fillRect(endX + 1, y - 17 + 1, 2, 16, INK);
+  }
+
+  // keys
+  const int count = kb::keyCount();
+  for (int i = 0; i < count; i++) {
+    const kb::Key& k = kb::key(m.kbPage, i);
+    kb::Rect r = kb::keyRect(i);
+    bool sel = i == m.kbIndex;
+    bool special = k.action != kb::CHAR;
+    uint16_t fg = sel ? USER_TEXT : INK;
+    if (sel) {
+      c.fillRoundRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, 8, SNOW, 120);
+      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 245);
+    } else if (k.action == kb::SEND) {
+      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 70);
+    } else if (k.action == kb::SHIFT && m.kbShift) {
+      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 90);
+    } else {
+      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, SNOW, special ? 90 : 140);
+    }
+    int cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    auto icon = [&](const uint8_t* mask, int w, int h) {
+      c.drawMask8(cx - w / 2, cy - h / 2, mask, w, h, fg);
+    };
+    switch (k.action) {
+      case kb::CHAR: {
+        const char* label = m.kbShift ? k.upper : k.lower;
+        c.drawTextCentered(font_body, cx, cy - font_body.lineHeight / 2, label, fg);
+        break;
+      }
+      case kb::SHIFT: icon(icon_shift_mask, icon_shift_w, icon_shift_h); break;
+      case kb::PAGE:
+        c.drawTextCentered(font_small, cx, cy - font_small.lineHeight / 2,
+                           kb::pageKeyLabel(m.kbPage), fg);
+        break;
+      case kb::SPACE: c.fillRoundRect(cx - r.w / 3, cy + 3, (r.w * 2) / 3, 3, 1, fg, 200); break;
+      case kb::BACKSPACE: icon(icon_backspace_mask, icon_backspace_w, icon_backspace_h); break;
+      case kb::SETTINGS: icon(icon_gear_mask, icon_gear_w, icon_gear_h); break;
+      case kb::CLOSE: icon(icon_close_mask, icon_close_w, icon_close_h); break;
+      case kb::SEND: icon(icon_send_mask, icon_send_w, icon_send_h); break;
+    }
+  }
+}
+
 }  // namespace
 
 // ------------------------------------------------------------ public
@@ -453,6 +522,10 @@ void render(Canvas& c, const UiModel& m) {
       return;
     case Mode::Off:
       drawOff(c, m);
+      return;
+    case Mode::Keyboard:
+      drawKeyboard(c, m);
+      if (m.powerHold > 0.f) drawPowerHold(c, m);
       return;
     default:
       break;

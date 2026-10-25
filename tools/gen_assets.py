@@ -224,6 +224,59 @@ def icon_gear(size: int) -> Image.Image:
     return _finish(img, size)
 
 
+def icon_shift(size: int) -> Image.Image:
+    img, d, s = _icon_canvas(size)
+    S = size * s
+    lw = max(s, int(S * 0.1))
+    pts = [(S * 0.5, S * 0.08), (S * 0.92, S * 0.52), (S * 0.68, S * 0.52), (S * 0.68, S * 0.9),
+           (S * 0.32, S * 0.9), (S * 0.32, S * 0.52), (S * 0.08, S * 0.52)]
+    d.polygon(pts, outline=255, width=lw)
+    return _finish(img, size)
+
+
+def icon_backspace(size: int) -> Image.Image:
+    img, d, s = _icon_canvas(size)
+    S = size * s
+    lw = max(s, int(S * 0.09))
+    pts = [(S * 0.04, S * 0.5), (S * 0.32, S * 0.18), (S * 0.96, S * 0.18), (S * 0.96, S * 0.82),
+           (S * 0.32, S * 0.82)]
+    d.polygon(pts, outline=255, width=lw)
+    d.line([S * 0.46, S * 0.35, S * 0.76, S * 0.65], fill=255, width=lw)
+    d.line([S * 0.46, S * 0.65, S * 0.76, S * 0.35], fill=255, width=lw)
+    return _finish(img, size)
+
+
+def icon_send(size: int) -> Image.Image:
+    img, d, s = _icon_canvas(size)
+    S = size * s
+    d.polygon([(S * 0.06, S * 0.1), (S * 0.96, S * 0.5), (S * 0.06, S * 0.9), (S * 0.22, S * 0.5)],
+              fill=255)
+    return _finish(img, size)
+
+
+def icon_close(size: int) -> Image.Image:
+    img, d, s = _icon_canvas(size)
+    S = size * s
+    lw = max(s, int(S * 0.13))
+    d.line([S * 0.15, S * 0.15, S * 0.85, S * 0.85], fill=255, width=lw)
+    d.line([S * 0.15, S * 0.85, S * 0.85, S * 0.15], fill=255, width=lw)
+    return _finish(img, size)
+
+
+def icon_keyboard(size: int) -> Image.Image:
+    img, d, s = _icon_canvas(size)
+    S = size * s
+    lw = max(s, int(S * 0.08))
+    d.rounded_rectangle([S * 0.04, S * 0.2, S * 0.96, S * 0.8], radius=S * 0.1, outline=255, width=lw)
+    k = S * 0.09
+    for row, y in enumerate((0.36, 0.5)):
+        for i in range(5):
+            x = S * (0.17 + i * 0.165)
+            d.rectangle([x - k / 2, S * y - k / 2, x + k / 2, S * y + k / 2], fill=255)
+    d.rectangle([S * 0.3, S * 0.62, S * 0.7, S * 0.62 + k], fill=255)
+    return _finish(img, size)
+
+
 def build_icons() -> str:
     icons = [
         ("icon_mic_big", icon_mic(46)),
@@ -233,6 +286,11 @@ def build_icons() -> str:
         ("icon_speaker", icon_speaker(14)),
         ("icon_globe", icon_globe(13)),
         ("icon_gear", icon_gear(14)),
+        ("icon_shift", icon_shift(14)),
+        ("icon_backspace", icon_backspace(16)),
+        ("icon_send", icon_send(14)),
+        ("icon_close", icon_close(12)),
+        ("icon_keyboard", icon_keyboard(16)),
     ]
     parts = []
     for name, img in icons:

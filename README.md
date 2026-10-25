@@ -71,12 +71,17 @@ Leave `GEIST_SERVER_URL` empty to find the server automatically, or set it to
 | Action                         | What happens                                        |
 |--------------------------------|-----------------------------------------------------|
 | **Hold** the knob              | Push-to-talk. Release to send                       |
-| **Tap** the knob               | Listens until you pause. Tap again to send right away |
-| **Double-tap**                 | Settings                                            |
-| **Turn** the knob              | Scroll the conversation / change a setting          |
-| Tap while it's speaking        | Stop the voice and talk again                       |
-| Back button (CC1101 only)      | Open or close settings                              |
+| **Tap** the knob               | Opens the on-screen keyboard                        |
+| Keyboard: **turn** the knob    | Moves the highlight over the keys                   |
+| Keyboard: **tap** the knob     | Types the highlighted key (➤ sends, ✕ closes)       |
+| Keyboard: **hold** the knob    | Switches to talking                                 |
+| **Turn** the knob (chat)       | Scroll the conversation / change a setting          |
+| Tap while it's speaking        | Stop the voice                                      |
+| Back button (CC1101)           | Open or close settings (also the ⚙ key)             |
 | **Hold** back button 3 s       | Switch off (hold it ~1 s to switch back on)         |
+
+The keyboard has three pages: letters (QWERTZ with ä ö ü ß), numbers and symbols, and
+accented letters (á é ñ ç …). ⇧ capitalises the next letter.
 
 **Settings:** speech language (Auto or fixed), menu language, volume, voice replies on/off,
 clear chat, device info (IP address).

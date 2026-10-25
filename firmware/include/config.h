@@ -19,8 +19,9 @@
 #define DEFAULT_UI_LANG 0          // menu language: 0 English, 1 Deutsch, 2 Español, 3 Français
 
 // ---------------------------------------------------------------- input
-#define HOLD_THRESHOLD_MS 350      // press longer than this = push-to-talk
-#define DOUBLE_CLICK_MS 600        // second press within this after a tap = menu
+#define HOLD_THRESHOLD_MS 350      // press longer than this = push-to-talk, shorter = keyboard
+#define DOUBLE_CLICK_MS 600        // (unused since the keyboard took over the tap)
+#define KB_HOLD_TO_TALK_MS 450     // holding the knob in the keyboard switches to talking
 #define ENCODER_REVERSE 0          // flip if scrolling feels backwards
 #define SCROLL_STEP_PX 18
 

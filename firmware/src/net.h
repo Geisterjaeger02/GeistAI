@@ -37,6 +37,9 @@ struct ChatResult {
 // Uploads a 16 kHz mono WAV (header included) and waits for the reply.
 ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool wantVoice);
 
+// Sends a typed message (POST /api/text).
+ChatResult sendText(const std::string& text, const char* lang, bool wantVoice);
+
 // Streams a WAV reply to the speaker. Returns false on network error.
 // `stop` aborts playback, `level` receives the current loudness 0..1.
 bool playReply(const std::string& path, volatile bool* stop, volatile float* level);

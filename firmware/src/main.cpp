@@ -25,6 +25,7 @@
 #include "gfx.h"
 #include "i18n.h"
 #include "input.h"
+#include "keyboard.h"
 #include "leds.h"
 #include "net.h"
 #include "power.h"
@@ -58,7 +59,7 @@ struct Settings {
 static Preferences prefs;
 
 // Worker <-> UI signalling
-enum : uint8_t { CMD_TURN = 1, CMD_FIND_SERVER, CMD_RESET };
+enum : uint8_t { CMD_TURN = 1, CMD_TEXT, CMD_FIND_SERVER, CMD_RESET };
 struct Command {
   uint8_t type;
   uint32_t turnId;
@@ -67,7 +68,9 @@ static QueueHandle_t cmdQueue;
 static volatile uint32_t turnSeq = 0;     // id of the newest turn
 static volatile uint32_t cancelSeq = 0;   // turns with id <= this are cancelled
 static volatile bool recStop = false;     // finish recording and send
-static volatile bool tapMode = false;     // auto-stop on silence
+static volatile bool tapMode = false;     // auto-stop on silence (currently unused)
+static volatile bool turnVisible = false; // the press became a long press -> show "listening"
+static std::string pendingText;           // typed message waiting for the worker
 static volatile bool playStop = false;    // stop the voice reply
 static volatile bool workerBusy = false;
 static volatile bool serverSearchDone = false;
@@ -185,14 +188,11 @@ static void saveSettings() {
 // ----------------------------------------------------------------------------
 //  Worker task: recording, network and playback (keeps the UI fluid)
 // ----------------------------------------------------------------------------
+static void deliver(uint32_t id, const net::ChatResult& res, const std::string* typed);
+
 static void runTurn(uint32_t id) {
-  {
-    ModelLock l;
-    if (isCancelled(id)) return;
-    model.tapMode = tapMode;
-    model.scroll = 0;
-    setModeLocked(Mode::Listening);
-  }
+  if (isCancelled(id)) return;
+  bool shown = false;  // "listening" is only shown once the press is a long press
 
   // ---------------- record
   audio::micStart();
@@ -216,6 +216,11 @@ static void runTurn(uint32_t id) {
       ModelLock l;
       model.micLevel = micLevel;
       model.tapMode = tapMode;
+      if (!shown && turnVisible && !isCancelled(id)) {
+        shown = true;
+        model.scroll = 0;
+        setModeLocked(Mode::Listening);
+      }
     }
     if (isCancelled(id) || recStop) break;
     if (tapMode) {
@@ -238,7 +243,7 @@ static void runTurn(uint32_t id) {
   }
   audio::micStop();
   micLevel = 0;
-  if (isCancelled(id)) return;
+  if (isCancelled(id) || !shown) return;
 
   uint32_t durMs = n * 1000 / MIC_SAMPLE_RATE;
   float avgRms = n ? (float)(energy / n) : 0.f;
@@ -264,17 +269,27 @@ static void runTurn(uint32_t id) {
   Serial.printf("[turn %u] http %d ok=%d lang=%s\n", id, res.httpCode, res.ok,
                 res.language.c_str());
 
+  deliver(id, res, nullptr);
+}
+
+// Shows the server's answer (or error) and speaks it. `typed` is the message
+// for typed turns (its bubble is already shown), nullptr for voice turns.
+static void deliver(uint32_t id, const net::ChatResult& res, const std::string* typed) {
   {
     ModelLock l;
     model.pendingReply = false;
     // drop the placeholder bubble, we'll add the real transcript below
-    if (!model.chat.empty() && model.chat.back().fromUser &&
+    if (!typed && !model.chat.empty() && model.chat.back().fromUser &&
         model.chat.back().text == "\xE2\x80\xA6")
       model.chat.pop_back();
     if (isCancelled(id)) return;
 
     model.serverOk = res.httpCode > 0;
     if (!res.ok) {
+      if (typed) {  // give the text back so it isn't lost
+        if (!model.chat.empty() && model.chat.back().fromUser) model.chat.pop_back();
+        model.kbText = *typed;
+      }
       if (res.error == "wifi")
         showErrorLocked(tr(settings.uiLang, S_ERR_WIFI));
       else if (res.error == "server" || res.httpCode <= 0)
@@ -285,7 +300,7 @@ static void runTurn(uint32_t id) {
         showErrorLocked(res.error.empty() ? tr(settings.uiLang, S_ERR_GENERIC) : res.error);
       return;
     }
-    if (!res.transcript.empty()) model.chat.push_back(ChatMsg{true, res.transcript});
+    if (!typed && !res.transcript.empty()) model.chat.push_back(ChatMsg{true, res.transcript});
     model.chat.push_back(ChatMsg{false, res.reply});
     trimChatLocked();
     model.scroll = 0;
@@ -304,6 +319,26 @@ static void runTurn(uint32_t id) {
     setModeLocked(Mode::Idle);
 }
 
+static void runTextTurn(uint32_t id) {
+  std::string text;
+  {
+    ModelLock l;
+    text = pendingText;
+    pendingText.clear();
+    if (isCancelled(id) || text.empty()) return;
+    model.chat.push_back(ChatMsg{true, text});
+    trimChatLocked();
+    model.pendingReply = true;
+    model.scroll = 0;
+    setModeLocked(Mode::Thinking);
+  }
+  const char* lang = kSpeechLangs[settings.speechLang].code;
+  net::ChatResult res = net::sendText(text, lang, settings.voiceReplies);
+  Serial.printf("[text %u] http %d ok=%d lang=%s\n", id, res.httpCode, res.ok,
+                res.language.c_str());
+  deliver(id, res, &text);
+}
+
 static void workerTask(void*) {
   Command cmd;
   for (;;) {
@@ -312,6 +347,9 @@ static void workerTask(void*) {
     switch (cmd.type) {
       case CMD_TURN:
         runTurn(cmd.turnId);
+        break;
+      case CMD_TEXT:
+        runTextTurn(cmd.turnId);
         break;
       case CMD_FIND_SERVER: {
         bool ok = net::wifiConnected() && net::findServer();
@@ -447,20 +485,86 @@ static void settingsClick() {
 // ----------------------------------------------------------------------------
 //  Input handling
 // ----------------------------------------------------------------------------
-static bool pressStartedTurn = false;
+static bool pressStartedTurn = false;  // this press is recording (may become push-to-talk)
+static uint32_t pressAt = 0;
+static bool tapOnly = false;           // worker busy: a tap can still open the keyboard
+static bool kbPressPending = false;    // keyboard: press not yet decided (key vs. talk)
+static uint32_t kbPressAt = 0;
 static uint32_t backDownAt = 0;  // back/power button press time, 0 = not pressed
 static bool ignoreNextUp = false;
-static uint32_t lastTurnPressMs = 0;
 
 static void startTurn() {
   recStop = false;
   tapMode = false;
+  turnVisible = false;
   uint32_t id = ++turnSeq;
   sendCommand(CMD_TURN, id);
 }
 
 static void cancelTurn() { cancelSeq = turnSeq; }
 
+// ---------------------------------------------------------------- keyboard
+static void openKeyboard() {
+  ModelLock l;
+  model.kbShift = model.kbText.empty();  // capital letter at the start
+  if (model.kbIndex < 0 || model.kbIndex >= kb::keyCount()) model.kbIndex = 0;
+  setModeLocked(Mode::Keyboard);
+}
+
+static void popLastChar(std::string& s) {
+  while (!s.empty()) {
+    uint8_t c = (uint8_t)s.back();
+    s.pop_back();
+    if ((c & 0xC0) != 0x80) break;  // stop at the first byte of the character
+  }
+}
+
+static void keyboardPress() {
+  bool toSettings = false, send = false;
+  {
+    ModelLock l;
+    const kb::Key& k = kb::key(model.kbPage, model.kbIndex);
+    std::string& t = model.kbText;
+    switch (k.action) {
+      case kb::CHAR:
+        if (t.size() < (size_t)kb::TEXT_MAX) t += model.kbShift ? k.upper : k.lower;
+        model.kbShift = false;
+        break;
+      case kb::SPACE:
+        if (t.size() < (size_t)kb::TEXT_MAX && !t.empty() && t.back() != ' ') t += ' ';
+        break;
+      case kb::SHIFT:
+        model.kbShift = !model.kbShift;
+        break;
+      case kb::PAGE:
+        model.kbPage = (model.kbPage + 1) % kb::PAGE_COUNT;
+        break;
+      case kb::BACKSPACE:
+        popLastChar(t);
+        if (t.empty()) model.kbShift = true;
+        break;
+      case kb::SETTINGS:
+        toSettings = true;
+        break;
+      case kb::CLOSE:
+        setModeLocked(Mode::Idle);
+        break;
+      case kb::SEND: {
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        if (t.empty()) break;
+        pendingText = t;
+        t.clear();
+        model.kbPage = kb::LETTERS;
+        send = true;
+        break;
+      }
+    }
+  }
+  if (toSettings) openSettings();
+  if (send) sendCommand(CMD_TEXT, ++turnSeq);
+}
+
+// ---------------------------------------------------------------- button
 static void onButtonDown(const input::Event& ev) {
   Mode m = currentMode();
   switch (m) {
@@ -469,6 +573,11 @@ static void onButtonDown(const input::Event& ev) {
       return;
     case Mode::Settings:
       return;  // handled on release
+    case Mode::Keyboard:
+      // decided later: a tap types the key, holding switches to talking
+      kbPressPending = true;
+      kbPressAt = ev.atMs;
+      return;
     case Mode::Thinking: {
       cancelTurn();
       ModelLock l;
@@ -480,32 +589,43 @@ static void onButtonDown(const input::Event& ev) {
       return;
     }
     case Mode::Listening:
-      if (tapMode) {
-        if (ev.atMs - lastTurnPressMs < DOUBLE_CLICK_MS) {  // double tap -> settings
-          cancelTurn();
-          openSettings();
-          ignoreNextUp = true;
-        } else {
-          recStop = true;  // second tap sends
-        }
-      }
-      return;
+      return;  // releasing the button sends
     case Mode::Speaking:
       playStop = true;
       break;
     case Mode::Idle:
     case Mode::Error:
-      if (workerBusy) return;  // still finishing a cancelled request
+      if (workerBusy) {  // still finishing a cancelled request
+        tapOnly = true;
+        return;
+      }
       break;
   }
+  // Start recording right away so the first word isn't cut off. If it turns
+  // out to be a short tap, the recording is dropped and the keyboard opens.
   startTurn();
-  lastTurnPressMs = ev.atMs;
+  pressAt = ev.atMs;
   pressStartedTurn = true;
 }
 
 static void onButtonUp(const input::Event& ev) {
   if (ignoreNextUp) {
     ignoreNextUp = false;
+    return;
+  }
+  if (pressStartedTurn) {
+    pressStartedTurn = false;
+    if (turnVisible) {
+      recStop = true;  // push-to-talk released: send
+    } else {
+      cancelTurn();  // just a tap: open the keyboard instead
+      openKeyboard();
+    }
+    return;
+  }
+  if (tapOnly) {
+    tapOnly = false;
+    if (ev.heldMs < HOLD_THRESHOLD_MS) openKeyboard();
     return;
   }
   Mode m = currentMode();
@@ -516,12 +636,23 @@ static void onButtonUp(const input::Event& ev) {
       settingsClick();
     return;
   }
-  if (!pressStartedTurn) return;
-  pressStartedTurn = false;
-  if (ev.heldMs >= HOLD_THRESHOLD_MS) {
-    recStop = true;  // push-to-talk released
-  } else {
-    tapMode = true;  // tap: keep listening until a pause
+  if (m == Mode::Keyboard && kbPressPending) {
+    kbPressPending = false;
+    keyboardPress();
+  }
+}
+
+// Called every loop: turns a held press into push-to-talk.
+static void updateHold(uint32_t now) {
+  bool down = input::buttonIsDown();
+  if (pressStartedTurn && !turnVisible && down && now - pressAt >= HOLD_THRESHOLD_MS)
+    turnVisible = true;  // the worker now shows "listening"
+  if (kbPressPending && down && now - kbPressAt >= KB_HOLD_TO_TALK_MS) {
+    kbPressPending = false;  // held in the keyboard: talk instead (recording starts now)
+    startTurn();
+    turnVisible = true;
+    pressAt = kbPressAt;
+    pressStartedTurn = true;
   }
 }
 
@@ -530,6 +661,11 @@ static void onRotate(int delta) {
   if (m == Mode::Settings) return settingsRotate(delta);
   if (m == Mode::Boot || m == Mode::Listening) return;
   ModelLock l;
+  if (m == Mode::Keyboard) {
+    int n = kb::keyCount();
+    model.kbIndex = ((model.kbIndex + delta) % n + n) % n;
+    return;
+  }
   int maxScroll = chatContentHeight(model) - chatViewportHeight();
   if (maxScroll < 0) maxScroll = 0;
   int s = model.scroll + delta * SCROLL_STEP_PX;  // clockwise scrolls back in time
@@ -756,6 +892,7 @@ void loop() {
   uint32_t now = millis();
 
   handleInput();
+  updateHold(now);
   updatePowerHold(now);
 
   // Leave the error message after a few seconds.

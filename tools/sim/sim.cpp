@@ -105,6 +105,12 @@ int main(int argc, char** argv) {
   m.powerHold = 0.f; m.mode = Mode::Off;
   shot("11_goodbye");
 
+  // Keyboard
+  m.mode = Mode::Keyboard; m.kbText = "Wie spät ist es in Madrid?"; m.kbIndex = 18; m.timeMs = 100;
+  shot("12_keyboard");
+  m.kbText = ""; m.kbPage = 2; m.kbShift = true; m.kbIndex = 39;
+  shot("13_keyboard_accents");
+
   printf("ok\n");
   return 0;
 }

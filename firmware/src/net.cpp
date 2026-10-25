@@ -165,7 +165,9 @@ bool healthCheck() {
 }
 
 // ---------------------------------------------------------------- chat
-ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool wantVoice) {
+// Shared by voice and text: POSTs `body` to `path` and parses the JSON reply.
+static ChatResult postChat(const char* path, const char* contentType, const uint8_t* body,
+                           size_t len, const char* lang, bool wantVoice) {
   ChatResult res;
   if (!wifiConnected()) {
     res.error = "wifi";
@@ -176,17 +178,18 @@ ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool want
     return res;
   }
 
-  std::string url = g_server + "/api/chat?device=" + deviceId() + "&lang=" + urlEncode(lang) +
+  std::string url = g_server + path + "?device=" + deviceId() + "&lang=" + urlEncode(lang) +
                     "&tts=" + (wantVoice ? "1" : "0");
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.setConnectTimeout(4000);
   if (!http.begin(url.c_str())) {
+    g_lastError = "invalid address";
     res.error = "server";
     return res;
   }
-  http.addHeader("Content-Type", "audio/wav");
-  int code = http.POST((uint8_t*)wav, len);
+  http.addHeader("Content-Type", contentType);
+  int code = http.POST((uint8_t*)body, len);
   res.httpCode = code;
   if (code <= 0) {
     noteHttpError(code);
@@ -194,11 +197,11 @@ ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool want
     http.end();
     return res;
   }
-  String body = http.getString();
+  String reply = http.getString();
   http.end();
 
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, body.c_str(), body.length());
+  DeserializationError err = deserializeJson(doc, reply.c_str(), reply.length());
   if (err) {
     res.error = "bad response";
     return res;
@@ -210,6 +213,19 @@ ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool want
   res.audioPath = (const char*)(doc["audio"] | "");
   res.error = (const char*)(doc["error"] | "");
   return res;
+}
+
+ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool wantVoice) {
+  return postChat("/api/chat", "audio/wav", wav, len, lang, wantVoice);
+}
+
+ChatResult sendText(const std::string& text, const char* lang, bool wantVoice) {
+  JsonDocument body;
+  body["text"] = text.c_str();
+  std::string payload;
+  serializeJson(body, payload);
+  return postChat("/api/text", "application/json", (const uint8_t*)payload.data(), payload.size(),
+                  lang, wantVoice);
 }
 
 bool resetConversation() {

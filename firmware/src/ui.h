@@ -24,7 +24,9 @@ constexpr uint16_t ERR_RED = rgb(196, 0, 70);
 constexpr int SCREEN_W = 320;
 constexpr int SCREEN_H = 170;
 
-enum class Mode : uint8_t { Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off };
+enum class Mode : uint8_t {
+  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard
+};
 
 struct ChatMsg {
   bool fromUser;
@@ -70,6 +72,12 @@ struct UiModel {
   std::vector<SettingsRow> settings;
   int settingsIndex = 0;
   bool settingsEditing = false;
+
+  // on-screen keyboard
+  std::string kbText;
+  int kbIndex = 0;
+  int kbPage = 0;
+  bool kbShift = false;
 
   // power button: 0 = not held, 0..1 = progress towards switching off
   float powerHold = 0.f;
