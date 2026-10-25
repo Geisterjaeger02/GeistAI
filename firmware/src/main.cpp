@@ -117,6 +117,15 @@ static void updateBadgeLocked() {
     model.langBadge = upper(sl.code);
 }
 
+static std::string serverErrorText() {
+  // e.g. "Server not reachable · 192.168.178.42:8765 · read Timeout"
+  std::string t = tr(settings.uiLang, S_ERR_SERVER);
+  t += " \xC2\xB7 " + net::serverHost();
+  std::string d = net::lastErrorDetail();
+  if (!d.empty()) t += " \xC2\xB7 " + d;
+  return t;
+}
+
 static void showErrorLocked(const std::string& text) {
   model.errorText = text;
   setModeLocked(Mode::Error);
@@ -267,7 +276,7 @@ static void runTurn(uint32_t id) {
       if (res.error == "wifi")
         showErrorLocked(tr(settings.uiLang, S_ERR_WIFI));
       else if (res.error == "server" || res.httpCode <= 0)
-        showErrorLocked(tr(settings.uiLang, S_ERR_SERVER));
+        showErrorLocked(serverErrorText());
       else if (res.error == "no_speech")
         showErrorLocked(tr(settings.uiLang, S_ERR_NOTHING_HEARD));
       else
@@ -656,7 +665,7 @@ static void bootSequence() {
   if (!model.wifiOk)
     showErrorLocked(tr(settings.uiLang, S_ERR_WIFI));
   else if (!model.serverOk)
-    showErrorLocked(tr(settings.uiLang, S_ERR_SERVER));
+    showErrorLocked(serverErrorText());
   else
     setModeLocked(Mode::Idle);
 }
@@ -750,7 +759,7 @@ void loop() {
   // Leave the error message after a few seconds.
   {
     ModelLock l;
-    if (model.mode == Mode::Error && now - model.modeSinceMs > 4500) setModeLocked(Mode::Idle);
+    if (model.mode == Mode::Error && now - model.modeSinceMs > 9000) setModeLocked(Mode::Idle);
   }
 
   // Background housekeeping every 10 s

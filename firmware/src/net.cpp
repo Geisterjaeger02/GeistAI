@@ -20,6 +20,12 @@ namespace net {
 namespace {
 
 std::string g_server;
+std::string g_lastError;
+
+void noteHttpError(int code) {
+  g_lastError = code > 0 ? ("HTTP " + std::to_string(code)) : HTTPClient::errorToString(code).c_str();
+  Serial.printf("[net] request to %s failed: %s\n", g_server.c_str(), g_lastError.c_str());
+}
 
 std::string urlEncode(const char* s) {
   static const char* hex = "0123456789ABCDEF";
@@ -85,6 +91,12 @@ std::string deviceId() {
 
 // ---------------------------------------------------------------- server
 bool serverKnown() { return !g_server.empty(); }
+std::string lastErrorDetail() { return g_lastError; }
+std::string serverHost() {
+  if (g_server.empty()) return "-";
+  size_t p = g_server.find("://");
+  return p == std::string::npos ? g_server : g_server.substr(p + 3);
+}
 const std::string& serverUrl() { return g_server; }
 
 bool findServer() {
@@ -116,6 +128,10 @@ bool healthCheck() {
   if (!http.begin((g_server + "/health").c_str())) return false;
   int code = http.GET();
   http.end();
+  if (code != 200)
+    noteHttpError(code);
+  else
+    g_lastError.clear();
   return code == 200;
 }
 
@@ -144,6 +160,7 @@ ChatResult sendVoice(const uint8_t* wav, size_t len, const char* lang, bool want
   int code = http.POST((uint8_t*)wav, len);
   res.httpCode = code;
   if (code <= 0) {
+    noteHttpError(code);
     res.error = "server";
     http.end();
     return res;

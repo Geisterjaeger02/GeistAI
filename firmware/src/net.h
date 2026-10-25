@@ -17,6 +17,10 @@ bool findServer();
 bool serverKnown();
 const std::string& serverUrl();
 bool healthCheck();
+// Last HTTP result of the health check / chat request, for error messages.
+std::string lastErrorDetail();
+// "192.168.1.5:8765" (no scheme), or "-".
+std::string serverHost();
 
 std::string deviceId();
 
