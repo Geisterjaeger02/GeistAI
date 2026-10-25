@@ -15,4 +15,8 @@ void present();
 
 void setBrightness(uint8_t level);
 
+// Startup diagnostics: prints a line at the bottom of the screen (and to Serial)
+// before the real UI takes over.
+void status(const char* msg);
+
 }  // namespace display

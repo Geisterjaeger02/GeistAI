@@ -551,6 +551,11 @@ static void handleInput() {
 //  Rendering
 // ----------------------------------------------------------------------------
 static void drawFrame() {
+  static bool first = true;
+  if (first) {
+    first = false;
+    Serial.println("[ui] first frame");
+  }
   {
     ModelLock l;
     model.timeMs = millis();
@@ -646,9 +651,11 @@ void setup() {
   pinMode(PIN_POWER_ON, OUTPUT);
   digitalWrite(PIN_POWER_ON, HIGH);
   Serial.begin(115200);
-  delay(50);
+  // give the USB serial monitor a moment to attach so the boot log isn't lost
+  for (uint32_t t0 = millis(); !Serial && millis() - t0 < 1500;) delay(10);
   Serial.printf("\nGeistAI %s on %s\n", GEIST_VERSION, BOARD_NAME);
-  Serial.printf("PSRAM %u KB free\n", (unsigned)(ESP.getFreePsram() / 1024));
+  Serial.printf("PSRAM %u KB free, heap %u KB free\n", (unsigned)(ESP.getFreePsram() / 1024),
+                (unsigned)(ESP.getFreeHeap() / 1024));
 
   modelMutex = xSemaphoreCreateMutex();
   cmdQueue = xQueueCreate(4, sizeof(Command));
@@ -656,19 +663,33 @@ void setup() {
   loadSettings();
   model.uiLang = settings.uiLang;
 
-  if (!display::begin()) Serial.println("!! framebuffer allocation failed");
+  // Each step is printed on the screen as well, so a hang is easy to locate.
+  bool fbOk = display::begin();
+  display::status("1/6 display ok");
+  if (!fbOk) {
+    display::status("ERROR: no memory for the screen buffer (PSRAM?)");
+    for (;;) delay(1000);
+  }
   canvas = new Canvas(display::framebuffer(), SCREEN_W, SCREEN_H);
 
+  display::status("2/6 leds");
   leds::begin();
+  display::status("3/6 input");
   input::begin();
 
+  display::status("4/6 memory");
   wavBuf = (uint8_t*)heap_caps_malloc(44 + kMaxSamples * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!wavBuf) Serial.println("!! no PSRAM for the recording buffer");
+  if (!wavBuf) {
+    display::status("ERROR: no PSRAM for the recording buffer");
+    for (;;) delay(1000);
+  }
   recSamples = (int16_t*)(wavBuf + 44);
 
+  display::status("5/6 audio");
   audio::begin();
   audio::setVolume(settings.volume);
 
+  display::status("6/6 starting");
   // The worker runs on the other core so drawing never stutters.
   BaseType_t workerCore = xPortGetCoreID() == 0 ? 1 : 0;
   xTaskCreatePinnedToCore(workerTask, "worker", 12288, nullptr, 2, nullptr, workerCore);
@@ -706,6 +727,13 @@ void loop() {
   Mode m = currentMode();
   float level = m == Mode::Listening ? micLevel : speakLevel;
   leds::update(m, level, now);
+
+  static uint32_t lastBeat = 0;
+  if (now - lastBeat > 5000) {
+    lastBeat = now;
+    Serial.printf("[alive] mode=%d wifi=%d heap=%uKB psram=%uKB\n", (int)m, net::wifiConnected(),
+                  (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)(ESP.getFreePsram() / 1024));
+  }
 
   if (now - lastFrame >= 40) {  // ~25 fps
     lastFrame = now;

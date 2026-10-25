@@ -142,4 +142,13 @@ void present() {
 
 void setBrightness(uint8_t level) { lcd.setBrightness(level); }
 
+void status(const char* msg) {
+  Serial.printf("[boot] %s\n", msg);
+  lcd.fillRect(0, 140, geist::SCREEN_W, 30, 0x0000);
+  lcd.setTextColor(0xFFFF, 0x0000);
+  lcd.setTextSize(1);
+  lcd.drawString("GeistAI starting...", 6, 142);
+  lcd.drawString(msg, 6, 156);
+}
+
 }  // namespace display
