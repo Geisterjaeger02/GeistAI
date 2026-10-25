@@ -1,0 +1,7 @@
+{
+  "name": "es7210",
+  "version": "1.0.0",
+  "description": "ES7210 4-channel audio ADC driver (Espressif MIT license, via LilyGO T-Embed examples)",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

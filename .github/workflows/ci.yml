@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  firmware:
+    name: Firmware (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [tembed, tembed_cc1101]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Use example secrets
+        run: cp firmware/include/secrets.example.h firmware/include/secrets.h
+      - name: Build
+        run: pio run -d firmware -e ${{ matrix.env }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geistai-${{ matrix.env }}
+          path: firmware/.pio/build/${{ matrix.env }}/firmware.bin
+
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy fastapi httpx
+      - run: python -m unittest discover -s tests -v
+      - name: App imports
+        run: python -c "from geist_server.app import create_app; print('ok')"
+
+  assets:
+    name: UI preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pillow
+      - run: python tools/gen_assets.py && python tools/sim/render.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview
+          path: tools/sim/out/*.png

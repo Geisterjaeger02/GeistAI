@@ -1,0 +1,24 @@
+# Everything in containers:  docker compose up -d
+# then pull a model once:    docker compose exec ollama ollama pull gemma3:4b
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    # GPU (NVIDIA): uncomment
+    # deploy: {resources: {reservations: {devices: [{capabilities: [gpu]}]}}}
+
+  geistai:
+    build: .
+    restart: unless-stopped
+    network_mode: host          # needed for mDNS discovery on your LAN
+    env_file: [.env]
+    environment:
+      LLM_URL: http://localhost:11434
+    volumes: [geist-data:/data]
+    depends_on: [ollama]
+
+volumes:
+  ollama:
+  geist-data:

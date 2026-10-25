@@ -1,0 +1,14 @@
+# firmware
+firmware/.pio/
+firmware/include/secrets.h
+.vscode/
+
+# server
+server/.env
+server/voices/
+__pycache__/
+*.pyc
+.venv/
+
+# tools
+tools/sim/out/
