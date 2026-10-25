@@ -60,7 +60,7 @@ class Config:
     # Speech-to-text (faster-whisper)
     whisper_model: str = "small"
     whisper_device: str = "auto"       # auto | cpu | cuda
-    whisper_compute: str = "int8"      # int8 | float16 | float32
+    whisper_compute: str = "auto"      # auto (float16 on GPU, int8 on CPU) | int8 | float16
     # Languages auto-detection may pick. Restricting this avoids e.g. German
     # being mis-detected as Dutch on short phrases. Empty = any language.
     allowed_languages: list[str] = field(default_factory=list)

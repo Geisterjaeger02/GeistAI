@@ -27,8 +27,14 @@ class WhisperSTT:
 
     def _load(self):
         if self._model is None:
+            from .gpu import cuda_devices, register_cuda_libraries
+
+            register_cuda_libraries()  # before faster-whisper loads CTranslate2
             from faster_whisper import WhisperModel  # heavy import, do it lazily
 
+            if self.cfg.whisper_compute in ("", "auto"):
+                gpu = self.cfg.whisper_device in ("auto", "cuda") and cuda_devices() > 0
+                self.cfg.whisper_compute = "float16" if gpu else "int8"
             log.info("loading Whisper '%s' (%s, %s)", self.cfg.whisper_model,
                      self.cfg.whisper_device, self.cfg.whisper_compute)
             self._model = WhisperModel(self.cfg.whisper_model, device=self.cfg.whisper_device,
@@ -44,8 +50,9 @@ class WhisperSTT:
         """An NVIDIA GPU was detected but its CUDA libraries are missing - use the CPU."""
         from faster_whisper import WhisperModel
 
-        log.warning("GPU speech recognition not available (%s). Using the CPU instead - "
-                    "set WHISPER_DEVICE=cpu in .env to skip this check.", e)
+        log.warning("GPU speech recognition not available (%s). Using the CPU instead. "
+                    "To use the GPU: pip install -r requirements-gpu.txt (then restart), "
+                    "or set WHISPER_DEVICE=cpu in .env to skip this check.", e)
         self.cfg.whisper_device, self.cfg.whisper_compute = "cpu", "int8"
         self._model = WhisperModel(self.cfg.whisper_model, device="cpu", compute_type="int8")
 

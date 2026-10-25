@@ -1,0 +1,5 @@
+# Optional: lets speech recognition run on an NVIDIA graphics card (much faster).
+#   pip install -r requirements-gpu.txt
+# Needs a recent NVIDIA driver; the CUDA libraries themselves come from these packages.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*
