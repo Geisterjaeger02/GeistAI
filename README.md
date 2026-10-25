@@ -77,29 +77,38 @@ fails, hold **BOOT** (T-Embed) or **G0** (Cardputer) while plugging in USB.
 
 ### 2. Start the server
 
-On your PC (or a Raspberry Pi 5, NAS or home server). You need Python 3.10–3.13 (64-bit) and
-[Ollama](https://ollama.com). The speech engine (ctranslate2) has no packages for brand-new Python
-releases or for Windows on ARM yet; on Windows: `py install 3.13`, then `py -3.13 -m venv .venv`.
+On your PC (or a Raspberry Pi 5, NAS or home server). The
+[flasher website](https://geisterjaeger02.github.io/GeistAI/#server) has the same guide with
+pictures and a troubleshooting list.
+
+**Windows**
+
+1. Install [Ollama](https://ollama.com/download).
+2. Install Python 3.13: `winget install -e --id Python.Python.3.13` (not a newer version: the speech
+   engine has no packages for it yet).
+3. [Download GeistAI as a ZIP](https://github.com/Geisterjaeger02/GeistAI/archive/refs/heads/main.zip) and unzip it.
+4. Double-click **`server\setup.bat`**. It installs everything (plus NVIDIA GPU support when it
+   finds a card), asks for your town (weather), whether answers should also play on the PC, and
+   which voices to download, and pulls the language model.
+5. Double-click **`server\start.bat`**. Allow the firewall prompt for private networks.
+
+**macOS / Linux**
 
 ```bash
-ollama pull gemma3:4b                 # any multilingual chat model works
-cd server
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env                  # optional: change models, voices, port
-python -m geist_server.download_voices de en es       # Piper voices for the languages you want
-python -m geist_server
+git clone https://github.com/Geisterjaeger02/GeistAI.git
+cd GeistAI/server && ./setup.sh     # needs Python 3.10-3.13 and Ollama
+./start.sh
 ```
 
-On Windows you can afterwards just double-click **`server\start.bat`** to start the server.
 The device finds the server by itself (mDNS). If it doesn't, enter the PC's address
-(e.g. `192.168.1.50`) in the Wi-Fi setup page.
+(e.g. `192.168.1.50`) in the Wi-Fi setup page. Run the setup again any time to change the answers;
+everything else is in `server/.env` (see `.env.example`).
 
 Open <http://localhost:8765> to test it in the browser. You can also run everything with Docker:
 `cp .env.example .env && docker compose up -d`.
 
-**Internet lookups** are on by default. Add your town to `.env` so "What's the weather like?"
-works without naming a place:
+**Internet lookups** are on by default. The setup asks for your town so "What's the weather
+like?" works without naming a place. It's stored in `.env`:
 
 ```
 HOME_LOCATION=Bordesholm

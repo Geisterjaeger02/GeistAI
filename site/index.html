@@ -114,6 +114,30 @@
   ol.steps p { margin: 2px 0 0; color: var(--ink-soft); }
   code { font-size: 15px; background: rgba(255, 255, 255, .6); padding: 1px 6px; border-radius: 6px; }
 
+  /* server guide */
+  .os { display: flex; gap: 4px; margin: 0 0 6px; }
+  .os button {
+    font: 600 15px Inter, sans-serif; color: var(--ink); background: rgba(255, 255, 255, .45);
+    border: 0; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  }
+  .os button[aria-pressed="true"] { background: var(--ink); color: var(--glow); }
+  .cmd {
+    display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; padding: 10px 12px;
+    background: var(--ink); color: var(--glow); border-radius: 12px; overflow-x: auto;
+  }
+  .cmd code { flex: 1; background: none; color: inherit; padding: 0; white-space: pre; font-size: 14px; }
+  .cmd button {
+    font: 600 13px Inter, sans-serif; color: var(--ink); background: var(--glow);
+    border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; flex: none;
+  }
+  details { background: rgba(255, 255, 255, .45); border-radius: 16px; padding: 4px 18px; margin-top: 18px; }
+  summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+  dl { margin: 0 0 12px; }
+  dt { font-weight: 600; margin-top: 12px; }
+  dd { margin: 2px 0 0; color: var(--ink-soft); }
+  [data-os] { display: none; }
+  body[data-show-os="win"] [data-os="win"], body[data-show-os="unix"] [data-os="unix"] { display: block; }
+
   .preview img { width: 100%; height: auto; border-radius: 14px; display: block; }
   .preview figcaption { font-size: 14px; color: var(--ink-soft); margin-top: 8px; }
 
@@ -187,12 +211,111 @@
         <li><div>
           <strong data-lang="en">Start the GeistAI server on your PC</strong>
           <strong data-lang="de">GeistAI-Server auf dem PC starten</strong>
-          <p data-lang="en">Speech recognition, the language model and the voice run on your own computer. The device finds the server by itself. <a href="https://github.com/Geisterjaeger02/GeistAI#2-start-the-server">Server setup guide</a></p>
-          <p data-lang="de">Spracherkennung, Sprachmodell und Stimme laufen auf deinem eigenen Computer. Das Gerät findet den Server von selbst. <a href="https://github.com/Geisterjaeger02/GeistAI#2-start-the-server">Anleitung für den Server</a></p>
+          <p data-lang="en">Speech recognition, the language model and the voice run on your own computer. The device finds the server by itself. <a href="#server">How to set up the server</a></p>
+          <p data-lang="de">Spracherkennung, Sprachmodell und Stimme laufen auf deinem eigenen Computer. Das Gerät findet den Server von selbst. <a href="#server">So richtest du den Server ein</a></p>
         </div></li>
       </ol>
       <p data-lang="en">Already running GeistAI? Connect it and click Install to change its Wi-Fi or update it.</p>
       <p data-lang="de">GeistAI läuft schon? Anschließen und auf Installieren klicken, um das WLAN zu ändern oder zu aktualisieren.</p>
+    </section>
+
+    <section id="server" aria-labelledby="srv">
+      <h2 id="srv"><span data-lang="en">Set up the server on your PC</span><span data-lang="de">Server auf dem PC einrichten</span></h2>
+      <p data-lang="en">The device is only the face of GeistAI. Listening, thinking and speaking happen on a computer at home. A PC with an NVIDIA graphics card answers fastest, but any 64-bit PC with 8 GB of RAM works.</p>
+      <p data-lang="de">Das Gerät ist nur das Gesicht von GeistAI. Zuhören, Denken und Sprechen passieren auf einem Computer bei dir zu Hause. Mit einer NVIDIA-Grafikkarte geht es am schnellsten, aber jeder 64-Bit-PC mit 8 GB RAM reicht.</p>
+
+      <div class="os" role="group" aria-label="Operating system">
+        <button type="button" data-set-os="win" aria-pressed="true">Windows</button>
+        <button type="button" data-set-os="unix" aria-pressed="false">macOS / Linux</button>
+      </div>
+
+      <ol class="steps" data-os="win">
+        <li><div>
+          <strong data-lang="en">Install Ollama</strong>
+          <strong data-lang="de">Ollama installieren</strong>
+          <p data-lang="en">It runs the language model. Download it from <a href="https://ollama.com/download">ollama.com/download</a> and install it like any other program.</p>
+          <p data-lang="de">Ollama führt das Sprachmodell aus. Lade es von <a href="https://ollama.com/download">ollama.com/download</a> herunter und installiere es wie jedes andere Programm.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Install Python 3.13</strong>
+          <strong data-lang="de">Python 3.13 installieren</strong>
+          <p data-lang="en">Open the Terminal (right-click the Start button) and paste this. Use 3.13, not a newer version: the speech engine doesn't support newer ones yet.</p>
+          <p data-lang="de">Öffne das Terminal (Rechtsklick auf den Start-Button) und füge das ein. Nimm 3.13, keine neuere Version: die Spracherkennung unterstützt neuere noch nicht.</p>
+          <div class="cmd"><code>winget install -e --id Python.Python.3.13</code><button type="button" class="copy">Copy</button></div>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Download GeistAI</strong>
+          <strong data-lang="de">GeistAI herunterladen</strong>
+          <p data-lang="en"><a href="https://github.com/Geisterjaeger02/GeistAI/archive/refs/heads/main.zip">Download the ZIP</a> and unzip it, for example into your Documents folder.</p>
+          <p data-lang="de"><a href="https://github.com/Geisterjaeger02/GeistAI/archive/refs/heads/main.zip">Lade die ZIP-Datei herunter</a> und entpacke sie, zum Beispiel in deinen Dokumente-Ordner.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Double-click server\setup.bat</strong>
+          <strong data-lang="de">Doppelklick auf server\setup.bat</strong>
+          <p data-lang="en">It installs everything (including graphics card support if you have an NVIDIA card) and asks three things: your town for weather questions, whether answers should also play on the PC's speakers, and which voices to download. The first run takes 10 to 20 minutes.</p>
+          <p data-lang="de">Es installiert alles (auch die Grafikkarten-Unterstützung, wenn du eine NVIDIA-Karte hast) und fragt drei Dinge: deinen Ort für Wetterfragen, ob Antworten auch über die PC-Lautsprecher kommen sollen und welche Stimmen geladen werden. Beim ersten Mal dauert das 10 bis 20 Minuten.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Double-click server\start.bat</strong>
+          <strong data-lang="de">Doppelklick auf server\start.bat</strong>
+          <p data-lang="en">Wait for “GeistAI is ready - ask away!”. When Windows asks about the firewall, allow access on <b>private networks</b>. Your device finds the server by itself.</p>
+          <p data-lang="de">Warte auf „GeistAI is ready - ask away!“. Wenn Windows nach der Firewall fragt, erlaube den Zugriff in <b>privaten Netzwerken</b>. Dein Gerät findet den Server von selbst.</p>
+        </div></li>
+      </ol>
+
+      <ol class="steps" data-os="unix">
+        <li><div>
+          <strong data-lang="en">Install Ollama and Python 3.10 to 3.13</strong>
+          <strong data-lang="de">Ollama und Python 3.10 bis 3.13 installieren</strong>
+          <p data-lang="en">Ollama: <a href="https://ollama.com/download">ollama.com/download</a>. Python: <code>brew install python@3.13</code> or <code>sudo apt install python3-venv</code>.</p>
+          <p data-lang="de">Ollama: <a href="https://ollama.com/download">ollama.com/download</a>. Python: <code>brew install python@3.13</code> oder <code>sudo apt install python3-venv</code>.</p>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Download GeistAI and run the setup</strong>
+          <strong data-lang="de">GeistAI herunterladen und einrichten</strong>
+          <p data-lang="en">It asks for your town (for weather), the voices and downloads the language model.</p>
+          <p data-lang="de">Es fragt nach deinem Ort (fürs Wetter) und den Stimmen und lädt das Sprachmodell.</p>
+          <div class="cmd"><code>git clone https://github.com/Geisterjaeger02/GeistAI.git
+cd GeistAI/server && ./setup.sh</code><button type="button" class="copy">Copy</button></div>
+        </div></li>
+        <li><div>
+          <strong data-lang="en">Start the server</strong>
+          <strong data-lang="de">Server starten</strong>
+          <div class="cmd"><code>./start.sh</code><button type="button" class="copy">Copy</button></div>
+        </div></li>
+      </ol>
+
+      <details>
+        <summary><span data-lang="en">Something doesn't work?</span><span data-lang="de">Etwas klappt nicht?</span></summary>
+        <dl data-lang="en">
+          <dt>The device says “Server not reachable”</dt>
+          <dd>The PC and the device must be in the same home network (a LAN cable on the PC is fine, a guest Wi-Fi is not). Allow Python through the Windows firewall on private networks. If it still fails, open Settings → Wi-Fi setup on the device and enter the address shown in the server window, for example 192.168.1.50.</dd>
+          <dt>“No module named uvicorn” or “cannot be loaded because running scripts is disabled”</dt>
+          <dd>Always start GeistAI with start.bat, not by typing commands into a new window.</dd>
+          <dt>“cublas64_12.dll not found”</dt>
+          <dd>The graphics card support is incomplete. Run setup.bat again. Until then GeistAI uses the processor, which is slower but works.</dd>
+          <dt>An error about ctranslate2 during setup</dt>
+          <dd>Your Python is too new. Install Python 3.13 (step 2) and run setup.bat again.</dd>
+          <dt>No voice</dt>
+          <dd>Devices without a speaker (StickC Plus2, or a T-Embed with its speaker removed) show the answer as text. To hear it on the PC, run setup.bat again and answer “y” to playing answers on the PC.</dd>
+          <dt>The weather is for the wrong place</dt>
+          <dd>Run setup.bat again and enter your town, or name the place in your question.</dd>
+        </dl>
+        <dl data-lang="de">
+          <dt>Das Gerät zeigt „Server nicht erreichbar“</dt>
+          <dd>PC und Gerät müssen im selben Heimnetz sein (LAN-Kabel am PC ist okay, ein Gast-WLAN nicht). Erlaube Python in der Windows-Firewall für private Netzwerke. Klappt es trotzdem nicht: Auf dem Gerät Einstellungen → WLAN einrichten öffnen und die Adresse aus dem Server-Fenster eintragen, zum Beispiel 192.168.1.50.</dd>
+          <dt>„No module named uvicorn“ oder „Ausführung von Skripts ist deaktiviert“</dt>
+          <dd>Starte GeistAI immer mit start.bat und nicht mit Befehlen in einem neuen Fenster.</dd>
+          <dt>„cublas64_12.dll not found“</dt>
+          <dd>Die Grafikkarten-Unterstützung ist unvollständig. Starte setup.bat noch einmal. Bis dahin nutzt GeistAI den Prozessor, langsamer, aber es funktioniert.</dd>
+          <dt>Fehler mit ctranslate2 bei der Einrichtung</dt>
+          <dd>Dein Python ist zu neu. Installiere Python 3.13 (Schritt 2) und starte setup.bat noch einmal.</dd>
+          <dt>Keine Stimme</dt>
+          <dd>Geräte ohne Lautsprecher (StickC Plus2 oder ein T-Embed mit ausgebautem Lautsprecher) zeigen die Antwort als Text. Damit du sie am PC hörst: setup.bat noch einmal starten und bei „Antworten am PC abspielen“ mit „j“ antworten.</dd>
+          <dt>Das Wetter ist für den falschen Ort</dt>
+          <dd>setup.bat noch einmal starten und deinen Ort eingeben, oder den Ort in der Frage nennen.</dd>
+        </dl>
+      </details>
     </section>
 
     <section class="preview" aria-labelledby="look">
@@ -268,6 +391,7 @@
       (lang === "de" ? "Auf " : "Install on ") + dev.name.replace(/^(LilyGO|M5Stack) /, "") +
       (lang === "de" ? " installieren" : "");
     document.getElementById("tip").textContent = dev.tip[lang];
+    document.querySelectorAll(".copy").forEach(b => { b.textContent = lang === "de" ? "Kopieren" : "Copy"; });
   }
 
   list.addEventListener("change", e => {
@@ -281,6 +405,30 @@
     render();
   }));
   render();
+
+  // server guide: Windows or macOS/Linux
+  let os = /Win/.test(navigator.platform || navigator.userAgent) || !/Mac|Linux|X11/.test(navigator.userAgent) ? "win" : "unix";
+  function renderOs() {
+    document.body.dataset.showOs = os;
+    document.querySelectorAll("[data-set-os]").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.setOs === os)));
+  }
+  document.querySelectorAll("[data-set-os]").forEach(b => b.addEventListener("click", () => {
+    os = b.dataset.setOs;
+    renderOs();
+  }));
+  renderOs();
+
+  document.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
+    const text = b.previousElementSibling.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      b.textContent = lang === "de" ? "Kopiert" : "Copied";
+    } catch (e) {
+      b.textContent = lang === "de" ? "Bitte markieren" : "Select it";
+    }
+    setTimeout(() => { b.textContent = lang === "de" ? "Kopieren" : "Copy"; }, 1800);
+  }));
 
   fetch("manifests/tembed_cc1101.json").then(r => r.ok ? r.json() : null).then(m => {
     if (m) document.getElementById("version").textContent = "Firmware " + m.version;
