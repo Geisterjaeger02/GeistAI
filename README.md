@@ -46,6 +46,8 @@ python -m geist_server.download_voices de en es       # Piper voices for the lan
 python -m geist_server
 ```
 
+On Windows you can afterwards just double-click **`server\start.bat`** to start the server.
+
 Open <http://localhost:8765> to test it in the browser. You can also run everything with Docker:
 `cp .env.example .env && docker compose up -d`.
 
