@@ -1,6 +1,7 @@
 """HTTP API for the GeistAI device (see docs/protocol.md)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 from contextlib import asynccontextmanager
@@ -42,15 +43,15 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        zc = announce(cfg.port) if cfg.announce_mdns else None
+        # zeroconf's sync API must not run inside the event loop -> use a worker thread
+        zc = await asyncio.to_thread(announce, cfg.port) if cfg.announce_mdns else None
         tts = assistant.tts
         langs = tts.available_languages() if hasattr(tts, "available_languages") else []
         log.info("GeistAI server %s on http://%s:%d  (LLM %s via %s, voices: %s)", __version__,
                  lan_ip(), cfg.port, cfg.llm_model, cfg.llm_backend, ", ".join(langs) or "none")
         yield
         if zc:
-            zc.unregister_all_services()
-            zc.close()
+            await asyncio.to_thread(zc.close)
 
     app = FastAPI(title="GeistAI server", version=__version__, lifespan=lifespan)
     app.state.cfg = cfg
