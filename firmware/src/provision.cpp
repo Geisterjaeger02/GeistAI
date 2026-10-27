@@ -321,7 +321,7 @@ std::vector<Network> networks;
 // ---- page texts
 enum { P_TITLE, P_NETWORK, P_PASSWORD, P_SERVER, P_SERVER_HINT, P_SAVE, P_SAVED, P_RESCAN,
        P_ERR_SSID, P_ERR_PASS, P_COUNT };
-const char* const kPage[4][P_COUNT] = {
+const char* const kPage[][P_COUNT] = {
     {"Wi-Fi setup", "Wi-Fi network", "Password", "Server address (optional)",
      "Leave empty to find the GeistAI server on your network automatically.", "Save",
      "Saved! GeistAI restarts and connects to", "Scan again", "Please choose a network.",
@@ -339,8 +339,33 @@ const char* const kPage[4][P_COUNT] = {
      "Laisse vide pour trouver automatiquement le serveur GeistAI.", "Enregistrer",
      "Enregistré ! GeistAI redémarre et se connecte à", "Rechercher", "Choisis un réseau.",
      "Le mot de passe doit faire 8 à 63 caractères (ou rien si le réseau est ouvert)."},
+    {"Configura Wi-Fi", "Rete Wi-Fi", "Password", "Indirizzo del server (facoltativo)",
+     "Lascia vuoto per trovare il server GeistAI automaticamente.", "Salva",
+     "Salvato! GeistAI si riavvia e si collega a", "Cerca di nuovo", "Scegli una rete.",
+     "La password deve avere 8-63 caratteri (o nessuna per reti aperte)."},
+    {"Configurar Wi-Fi", "Rede Wi-Fi", "Senha", "Endereço do servidor (opcional)",
+     "Deixe vazio para encontrar o servidor GeistAI automaticamente.", "Salvar",
+     "Salvo! O GeistAI reinicia e se conecta a", "Procurar de novo", "Escolha uma rede.",
+     "A senha deve ter 8-63 caracteres (ou nenhuma em redes abertas)."},
+    {"Wifi instellen", "Wifi-netwerk", "Wachtwoord", "Serveradres (optioneel)",
+     "Laat leeg om de GeistAI-server automatisch te vinden.", "Opslaan",
+     "Opgeslagen! GeistAI herstart en verbindt met", "Opnieuw zoeken", "Kies een netwerk.",
+     "Het wachtwoord moet 8-63 tekens hebben (of geen bij open netwerken)."},
+    {"Konfiguracja Wi-Fi", "Sieć Wi-Fi", "Hasło", "Adres serwera (opcjonalnie)",
+     "Zostaw puste, aby automatycznie znaleźć serwer GeistAI.", "Zapisz",
+     "Zapisano! GeistAI uruchamia się ponownie i łączy z", "Szukaj ponownie",
+     "Wybierz sieć.", "Hasło musi mieć 8-63 znaki (lub żadnego w sieciach otwartych)."},
+    {"Wi-Fi kurulumu", "Wi-Fi ağı", "Şifre", "Sunucu adresi (isteğe bağlı)",
+     "GeistAI sunucusunu otomatik bulmak için boş bırak.", "Kaydet",
+     "Kaydedildi! GeistAI yeniden başlıyor ve şuna bağlanıyor:", "Tekrar ara",
+     "Bir ağ seç.", "Şifre 8-63 karakter olmalı (açık ağlarda boş)."},
+    {"Настройка Wi-Fi", "Сеть Wi-Fi", "Пароль", "Адрес сервера (необязательно)",
+     "Оставь пустым, чтобы найти сервер GeistAI автоматически.", "Сохранить",
+     "Сохранено! GeistAI перезапускается и подключается к", "Искать снова",
+     "Выбери сеть.", "Пароль должен быть от 8 до 63 символов (или пустым для открытых сетей)."},
 };
-const char* T(int id) { return kPage[lang < 4 ? lang : 0][id]; }
+constexpr int PAGE_LANGS = sizeof(kPage) / sizeof(kPage[0]);
+const char* T(int id) { return kPage[lang < PAGE_LANGS ? lang : 0][id]; }
 
 std::string esc(const std::string& s) {
   std::string o;

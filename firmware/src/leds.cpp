@@ -84,6 +84,7 @@ void update(geist::Mode mode, float level, uint32_t now) {
     }
     case geist::Mode::Idle:
     case geist::Mode::Keyboard:
+    case geist::Mode::Games:
     case geist::Mode::Settings: {
       float b = 0.06f + 0.06f * (sinf(t * 1.4f) * 0.5f + 0.5f);
       for (auto& p : px) p = scale(accent(), b);

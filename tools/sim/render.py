@@ -18,7 +18,7 @@ def main():
     OUT.mkdir(exist_ok=True)
     exe = OUT / "sim"
     cmd = ["g++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Wno-unused-parameter",
-           f"-I{SRC}", str(HERE / "sim.cpp"), str(SRC / "gfx.cpp"), str(SRC / "ui.cpp"), str(SRC / "keyboard.cpp"), str(SRC / "qrcode.cpp"),
+           f"-I{SRC}", str(HERE / "sim.cpp"), str(SRC / "gfx.cpp"), str(SRC / "ui.cpp"), str(SRC / "keyboard.cpp"), str(SRC / "qrcode.cpp"), *[str(x) for x in sorted((SRC / "games").glob("*.cpp"))],
            "-o", str(exe)]
     subprocess.run(cmd, check=True)
     subprocess.run([str(exe), str(OUT) + "/"], check=True)

@@ -30,9 +30,17 @@
 #include "net.h"
 #include "power.h"
 #include "provision.h"
+#include "games/games.h"
 #include "ui.h"
 
 using namespace geist;
+
+// Chess thinks a few levels deep; give the main loop a roomier stack.
+#ifdef SET_LOOP_TASK_STACK_SIZE
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+#endif
+
+static_assert(THEME_NAME_COUNT == THEME_COUNT, "theme names in tools/gen_i18n.py");
 
 #ifndef DEFAULT_UI_LANG
 #define DEFAULT_UI_LANG UI_EN
@@ -193,6 +201,13 @@ static void loadSettings() {
   settings.cloud = prefs.getBool("cloud", false);
   prefs.end();
   if (settings.theme >= THEME_COUNT) settings.theme = 0;
+  prefs.begin("geistai", true);
+  for (int g = 0; g < games::COUNT; g++) {
+    char k[8];
+    snprintf(k, sizeof(k), "hs%d", g);
+    games::setBestScore(g, prefs.getInt(k, 0));
+  }
+  prefs.end();
   if (settings.speechLang >= kSpeechLangCount) settings.speechLang = 0;
   if (settings.uiLang >= UI_LANG_COUNT) settings.uiLang = UI_EN;
 }
@@ -448,6 +463,7 @@ static void sendCommand(uint8_t type, uint32_t id = 0) {
 //  Settings screen
 // ----------------------------------------------------------------------------
 enum SettingRow : uint8_t {
+  ROW_GAMES,
   ROW_SPEECH_LANG,
   ROW_UI_LANG,
   ROW_VOLUME,
@@ -475,6 +491,7 @@ static void refreshSettingsLocked() {
     aiValue += std::string(" (") + tr(L, S_NOT_SET_UP) + ")";
   model.uiLang = L;
   model.settings = {
+      {tr(L, S_GAMES), "\xE2\x80\xBA"},
       {tr(L, S_SPEECH_LANG), kSpeechLangs[settings.speechLang].label},
       {tr(L, S_UI_LANG), kUiLangNames[settings.uiLang]},
       {tr(L, S_VOLUME), vol},
@@ -540,8 +557,15 @@ static void settingsRotate(int delta) {
 static void startSetup();
 static void editName();
 
+static void openGames() {
+  saveSettings();
+  games::openMenu();
+  ModelLock l;
+  setModeLocked(Mode::Games);
+}
+
 static void settingsClick() {
-  bool close = false, setup = false, name = false;
+  bool close = false, setup = false, name = false, play = false;
   {
     ModelLock l;
     switch (model.settingsIndex) {
@@ -553,6 +577,9 @@ static void settingsClick() {
         break;
       case ROW_NAME:
         name = true;
+        break;
+      case ROW_GAMES:
+        play = true;
         break;
       case ROW_AI:
         settings.cloud = !settings.cloud;
@@ -581,6 +608,7 @@ static void settingsClick() {
   }
   if (close) closeSettings();
   if (name) editName();
+  if (play) openGames();
   if (setup) {
     saveSettings();
     startSetup();
@@ -705,6 +733,8 @@ static void finishNameLocked(bool save) {
 
 static void openKeyboard() {
   ModelLock l;
+  if (model.kbText.empty() && model.kbPage == kb::LETTERS && settings.uiLang == UI_RU)
+    model.kbPage = kb::CYRILLIC;  // Russian menu: start on the Cyrillic keys
   model.kbShift = model.kbText.empty();  // capital letter at the start
   if (model.kbIndex < 0 || model.kbIndex >= kb::keyCount()) model.kbIndex = 0;
   setModeLocked(Mode::Keyboard);
@@ -776,6 +806,7 @@ static void onButtonDown(const input::Event& ev) {
   switch (m) {
     case Mode::Boot:
     case Mode::Off:
+    case Mode::Games:  // handled in gameInput()
       return;
     case Mode::Settings:
     case Mode::Setup:
@@ -947,9 +978,58 @@ static void onRotate(int delta) {
   model.scroll = s < 0 ? 0 : (s > maxScroll ? maxScroll : s);
 }
 
+// ---------------------------------------------------------------- games
+static bool gameDown = false;
+
+static void gameKey(games::Key k) { games::key(k, millis()); }
+
+static void leaveGamesIfDone(bool stay) {
+  if (!stay) setMode(Mode::Idle);
+}
+
+// Returns true if the event was used by the games (only in Mode::Games).
+static bool gameInput(const input::Event& ev) {
+  if (currentMode() != Mode::Games) return false;
+  using games::Key;
+  switch (ev.type) {
+    case input::EventType::Down:
+    case input::EventType::SpaceDown:
+      gameDown = true;
+      gameKey(Key::PressDown);
+      return true;
+    case input::EventType::Up:
+    case input::EventType::SpaceUp:
+      if (gameDown) gameKey(ev.heldMs >= games::LONG_PRESS_MS ? Key::LongPress : Key::Press);
+      gameDown = false;
+      return true;
+    case input::EventType::Rotate:
+      for (int i = 0; i < (ev.delta < 0 ? -ev.delta : ev.delta); i++)
+        gameKey(ev.delta > 0 ? Key::RotR : Key::RotL);
+      return true;
+    case input::EventType::Enter:
+      gameKey(Key::Press);
+      return true;
+    case input::EventType::Escape:
+      leaveGamesIfDone(games::backPressed(millis()));
+      return true;
+    case input::EventType::Char: {  // Cardputer: arrow keys ; . , /  or W A S D, F = flag
+      char ch = ev.text[0] | 0x20;
+      if (ch == ';' || ch == 'w') gameKey(Key::Up);
+      else if (ch == '.' || ch == 's') gameKey(Key::Down);
+      else if (ch == ',' || ch == 'a') gameKey(Key::Left);
+      else if (ch == '/' || ch == 'd') gameKey(Key::Right);
+      else if (ch == 'f') gameKey(Key::LongPress);
+      return true;
+    }
+    default:
+      return false;  // back / power button: handled below
+  }
+}
+
 static void handleInput() {
   input::Event ev;
   while (input::poll(ev)) {
+    if (gameInput(ev)) continue;
     switch (ev.type) {
       case input::EventType::Down:
         onButtonDown(ev);
@@ -999,6 +1079,8 @@ static void handleInput() {
         } else if (currentMode() == Mode::Keyboard && model.kbNameMode) {
           ModelLock l;
           finishNameLocked(false);
+        } else if (currentMode() == Mode::Games) {
+          leaveGamesIfDone(games::backPressed(millis()));
         } else if (currentMode() != Mode::Boot) {
           openSettings();
         }
@@ -1122,7 +1204,15 @@ void setup() {
   modelMutex = xSemaphoreCreateMutex();
   cmdQueue = xQueueCreate(4, sizeof(Command));
 
+  games::onNewBest = [](int g, int value) {
+    char k[8];
+    snprintf(k, sizeof(k), "hs%d", g);
+    prefs.begin("geistai", false);
+    prefs.putInt(k, value);
+    prefs.end();
+  };
   loadSettings();
+  games::begin(esp_random());
   setTheme(settings.theme);
   net::setAssistant(settings.cloud, settings.nickname);
   model.assistantName = assistantName();
@@ -1242,7 +1332,9 @@ void loop() {
                   (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)(ESP.getFreePsram() / 1024));
   }
 
-  if (now - lastFrame >= 40) {  // ~25 fps
+  bool playing = m == Mode::Games;
+  if (playing) games::tick(now);
+  if (now - lastFrame >= (playing ? 30u : 40u)) {  // ~33 fps in games, ~25 fps otherwise
     lastFrame = now;
     drawFrame();
   }

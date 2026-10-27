@@ -86,7 +86,17 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pillow fonttools
+      - name: Generated files are up to date
+        run: |
+          python tools/gen_i18n.py
+          git diff --exit-code firmware/src/i18n_strings.h
       - run: python tools/gen_assets.py && python tools/sim/render.py
+      - name: Game logic (chess perft, random-input soak test)
+        run: |
+          S=firmware/src
+          g++ -std=c++17 -O1 -fsanitize=address,undefined -I$S tools/sim/games_test.cpp \
+            $S/gfx.cpp $S/ui.cpp $S/keyboard.cpp $S/qrcode.cpp $S/games/*.cpp -o games_test
+          ./games_test
       - uses: actions/upload-artifact@v4
         with:
           name: ui-preview

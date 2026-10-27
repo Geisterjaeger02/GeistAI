@@ -18,8 +18,10 @@ struct ThemeColors {
   uint16_t userText;         // text inside the user's bubble
   uint16_t blob;             // soft light in the background
   uint8_t ledR, ledG, ledB;  // LED colour
+  uint16_t surface;          // chat bubbles, text field, keys (white on light themes)
+  uint16_t glow;             // logo glow and light effects
 };
-constexpr int THEME_COUNT = 6;
+constexpr int THEME_COUNT = 13;
 extern const ThemeColors kThemes[THEME_COUNT];
 void setTheme(int index);  // also redraws the cached background
 int currentTheme();
@@ -31,6 +33,8 @@ extern uint16_t INK;
 extern uint16_t INK_SOFT;
 extern uint16_t USER_TEXT;
 extern uint16_t BLOB;
+extern uint16_t SURFACE;
+extern uint16_t GLOW;
 constexpr uint16_t SNOW = rgb(255, 255, 255);
 constexpr uint16_t ERR_RED = rgb(196, 0, 70);
 }  // namespace theme
@@ -42,7 +46,7 @@ extern int SCREEN_H;
 void setScreenSize(int w, int h);
 
 enum class Mode : uint8_t {
-  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard, Setup
+  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard, Setup, Games
 };
 
 struct ChatMsg {
@@ -60,8 +64,8 @@ struct UiModel {
   uint32_t timeMs = 0;      // animation clock
   uint32_t modeSinceMs = 0; // when the current mode started
   uint8_t uiLang = 0;
-  uint8_t hintTalk = 0;  // Str ids of the two idle hints (board specific)
-  uint8_t hintMenu = 1;
+  uint16_t hintTalk = 0;  // Str ids of the two idle hints (board specific)
+  uint16_t hintMenu = 1;
 
   // boot
   float bootProgress = 0.f;  // 0..1
@@ -112,6 +116,14 @@ struct UiModel {
   // power button: 0 = not held, 0..1 = progress towards switching off
   float powerHold = 0.f;
 };
+
+// The three UI fonts (body 14 px, small 11 px, title 18 px).
+const Font& fontBody();
+const Font& fontSmall();
+const Font& fontTitle();
+
+// The theme background (gradient and soft lights), e.g. behind the games.
+void drawThemeBackground(Canvas& c);
 
 // Renders the whole frame.
 void render(Canvas& c, const UiModel& m);

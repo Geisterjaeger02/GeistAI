@@ -41,6 +41,12 @@ const char* const kAccents[CHAR_KEYS][2] = {
     {"^", "^"}, {"|", "|"}, {"$", "$"}, {"\xC5\x82", "\xC5\x81"}, {"\xC5\x9F", "\xC5\x9E"},  // ł ş
 };
 
+const char* const kCyrillic[CHAR_KEYS][2] = {  // ЙЦУКЕН
+    {"\xD0\xB9", "\xD0\x99"}, {"\xD1\x86", "\xD0\xA6"}, {"\xD1\x83", "\xD0\xA3"}, {"\xD0\xBA", "\xD0\x9A"}, {"\xD0\xB5", "\xD0\x95"}, {"\xD0\xBD", "\xD0\x9D"}, {"\xD0\xB3", "\xD0\x93"}, {"\xD1\x88", "\xD0\xA8"}, {"\xD1\x89", "\xD0\xA9"}, {"\xD0\xB7", "\xD0\x97"}, {"\xD1\x85", "\xD0\xA5"},
+    {"\xD1\x84", "\xD0\xA4"}, {"\xD1\x8B", "\xD0\xAB"}, {"\xD0\xB2", "\xD0\x92"}, {"\xD0\xB0", "\xD0\x90"}, {"\xD0\xBF", "\xD0\x9F"}, {"\xD1\x80", "\xD0\xA0"}, {"\xD0\xBE", "\xD0\x9E"}, {"\xD0\xBB", "\xD0\x9B"}, {"\xD0\xB4", "\xD0\x94"}, {"\xD0\xB6", "\xD0\x96"}, {"\xD1\x8D", "\xD0\xAD"},
+    {"\xD1\x8F", "\xD0\xAF"}, {"\xD1\x87", "\xD0\xA7"}, {"\xD1\x81", "\xD0\xA1"}, {"\xD0\xBC", "\xD0\x9C"}, {"\xD0\xB8", "\xD0\x98"}, {"\xD1\x82", "\xD0\xA2"}, {"\xD1\x8C", "\xD0\xAC"}, {"\xD0\xB1", "\xD0\x91"}, {"\xD1\x8E", "\xD0\xAE"}, {"\xD1\x8A", "\xD0\xAA"}, {"\xD1\x91", "\xD0\x81"},
+};
+
 Key g_keys[PAGE_COUNT][CHAR_KEYS + BOTTOM_KEYS];
 bool g_built = false;
 
@@ -54,9 +60,12 @@ void build() {
         up = kLetters[i][1];
       } else if (p == NUMBERS) {
         lo = up = kNumbers[i];
-      } else {
+      } else if (p == ACCENTS) {
         lo = kAccents[i][0];
         up = kAccents[i][1];
+      } else {
+        lo = kCyrillic[i][0];
+        up = kCyrillic[i][1];
       }
       g_keys[p][i] = Key{CHAR, lo, up, 2};
     }
@@ -109,6 +118,7 @@ const char* pageKeyLabel(int page) {
   switch (page) {
     case LETTERS: return "123";
     case NUMBERS: return "\xC3\xA1\xC3\xA9";  // áé
+    case ACCENTS: return "\xD0\xB0\xD0\xB1\xD0\xB2";  // абв
     default: return "abc";
   }
 }

@@ -15,7 +15,7 @@ struct Key {
   uint8_t halfUnits;  // width; every row is 22 half-units wide
 };
 
-enum Page : uint8_t { LETTERS = 0, NUMBERS, ACCENTS, PAGE_COUNT };
+enum Page : uint8_t { LETTERS = 0, NUMBERS, ACCENTS, CYRILLIC, PAGE_COUNT };
 
 struct Rect {
   int x, y, w, h;
@@ -30,7 +30,7 @@ Rect keyRect(int index);
 // Adapts the key grid to the screen (320x170 default, 240x135 on M5 devices).
 void setLayout(int screenW, int screenH);
 
-// Label shown on the PAGE key for the given current page ("123", "áé", "abc").
+// Label shown on the PAGE key for the given current page ("123", "áé", "абв", "abc").
 const char* pageKeyLabel(int page);
 
 // Removes the last UTF-8 character from s (in place).

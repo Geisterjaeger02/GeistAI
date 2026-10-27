@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "keyboard.h"
 #include "qrcode.h"
+#include "games/games.h"
 
 namespace geist {
 
@@ -47,14 +48,14 @@ void paintBackground(Canvas& bg, int w, int h) {
   bg.vGradient(0, 0, w, h, BG_TOP, BG_BOTTOM);
   // soft "neon" light blobs
   for (int i = 0; i < 6; i++) {
-    bg.fillCircle(w - 35.f, -10.f, 30.f + i * 18.f, SNOW, 14);
+    bg.fillCircle(w - 35.f, -10.f, 30.f + i * 18.f, GLOW, 14);
     bg.fillCircle(10.f, h + 20.f, 30.f + i * 16.f, BLOB, 10);
   }
   // fine diagonal sheen lines
   for (int x = -h; x < w; x += 22) {
     for (int y = 0; y < h; y++) {
       int px = x + y / 2;
-      if (px >= 0 && px < w) bg.plot(px, y, SNOW, 10);
+      if (px >= 0 && px < w) bg.plot(px, y, GLOW, 10);
     }
   }
 }
@@ -145,7 +146,7 @@ BubbleLayout layoutBubble(const ChatMsg& msg, Line* lines) {
 constexpr int PENDING_H = 26;
 
 void drawTypingBubble(Canvas& c, int x, int y, uint32_t t) {
-  c.fillRoundRect(x, y, 50, PENDING_H, 10, SNOW, 170);
+  c.fillRoundRect(x, y, 50, PENDING_H, 10, SURFACE, 170);
   for (int i = 0; i < 3; i++) {
     float ph = (t / 1000.f) * 6.2832f * 1.3f - i * 0.9f;
     float lift = (sinf(ph) * 0.5f + 0.5f);
@@ -172,7 +173,7 @@ void drawChat(Canvas& c, const UiModel& m) {
       if (msg.fromUser) {
         c.fillRoundRect(x, y, b.w, b.h, 10, INK, 235);
       } else {
-        c.fillRoundRect(x, y, b.w, b.h, 10, SNOW, 175);
+        c.fillRoundRect(x, y, b.w, b.h, 10, SURFACE, 175);
       }
       uint16_t col = msg.fromUser ? USER_TEXT : INK;
       for (int l = 0; l < b.lines; l++) {
@@ -205,7 +206,7 @@ void drawWelcome(Canvas& c, const UiModel& m) {
     int lx = (SCREEN_W - logo_mid_w) / 2;
     int ly = VIEW_Y + 4;
     float pulse = 0.75f + 0.25f * sinf(m.timeMs / 900.f);
-    c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, a8(0.85f * pulse));
+    c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, GLOW, a8(0.85f * pulse));
     c.drawMask8(lx, ly, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
     y = ly + logo_mid_h + 2;
   }
@@ -330,7 +331,7 @@ void drawListeningOverlay(Canvas& c, const UiModel& m) {
     c.ring(cx, cy, 30.f + ph * (SMALL ? 14.f : 34.f), 2.f, INK, a8((1.f - ph) * 0.35f * appear));
   }
   // level halo
-  c.fillCircle(cx, cy, (31.f + lvl * 16.f) * appear, SNOW, 110);
+  c.fillCircle(cx, cy, (31.f + lvl * 16.f) * appear, GLOW, 110);
   c.fillCircle(cx, cy, 30.f * appear, INK, 240);
   c.drawMask8((int)(cx - icon_mic_big_w / 2), (int)(cy - icon_mic_big_h / 2), icon_mic_big_mask,
               icon_mic_big_w, icon_mic_big_h, USER_TEXT, a8(appear));
@@ -357,13 +358,13 @@ void drawBoot(Canvas& c, const UiModel& m) {
 
   float glow = clamp01((t - 0.6f) / 1.0f);
   float pulse = 0.8f + 0.2f * sinf(t * 2.6f);
-  c.drawMask8(lx, ly, glowMask, lw, lh, SNOW, a8(glow * pulse), revealX);
+  c.drawMask8(lx, ly, glowMask, lw, lh, GLOW, a8(glow * pulse), revealX);
   c.drawMask8(lx, ly, mask, lw, lh, INK, 255, revealX);
 
   if (reveal < 0.995f) {  // the glowing "pen tip"
     float py = ly + lh * 0.55f + sinf(t * 18.f) * (SMALL ? 4.f : 6.f);
-    c.fillCircle((float)revealX, py, 9.f, SNOW, 70);
-    c.fillCircle((float)revealX, py, 3.5f, SNOW, 230);
+    c.fillCircle((float)revealX, py, 9.f, GLOW, 70);
+    c.fillCircle((float)revealX, py, 3.5f, GLOW, 230);
   }
 
   // tagline fades in
@@ -381,7 +382,7 @@ void drawBoot(Canvas& c, const UiModel& m) {
   // shimmer
   float sh = fmodf(t * 0.8f, 1.f);
   c.setClip(bx, by, fw, 5);
-  c.fillCircle(bx + sh * bw, by + 2.5f, 8.f, SNOW, 90);
+  c.fillCircle(bx + sh * bw, by + 2.5f, 8.f, GLOW, 90);
   c.resetClip();
 
   c.drawTextCentered(font_small, SCREEN_W / 2, by + 10, m.bootStatus.c_str(), INK_SOFT);
@@ -416,8 +417,8 @@ void drawSettings(Canvas& c, const UiModel& m) {
       if (sel && m.settingsEditing) {
         std::string v = "\xE2\x80\xB9 " + row.value + " \xE2\x80\xBA";  // ‹ value ›
         int w = textWidth(font_body, v.c_str()) + 12;
-        c.fillRoundRect(SCREEN_W - 16 - w + 6, y + 2, w, rowH - 7, 8, SNOW, 60);
-        c.drawTextRight(font_body, SCREEN_W - 16, y + 3, v.c_str(), SNOW);
+        c.fillRoundRect(SCREEN_W - 16 - w + 6, y + 2, w, rowH - 7, 8, BG_TOP, 60);
+        c.drawTextRight(font_body, SCREEN_W - 16, y + 3, v.c_str(), USER_TEXT);
       } else {
         c.drawTextRight(font_body, SCREEN_W - 16, y + 3, row.value.c_str(), fg, sel ? 255 : 200);
       }
@@ -455,7 +456,7 @@ void drawOff(Canvas& c, const UiModel& m) {
   drawBackground(c);
   int lx = (SCREEN_W - logo_mid_w) / 2;
   int ly = (SCREEN_H - logo_mid_h - 26) / 2;
-  c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, SNOW, 200);
+  c.drawMask8(lx, ly, logo_mid_glow, logo_mid_w, logo_mid_h, GLOW, 200);
   c.drawMask8(lx, ly, logo_mid_mask, logo_mid_w, logo_mid_h, INK);
   c.drawTextCentered(font_title, SCREEN_W / 2, ly + logo_mid_h + 4, tr(m.uiLang, S_GOODBYE), INK);
 }
@@ -556,7 +557,7 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
   const int fx = 6, fy = 4, fw = SCREEN_W - 12;
   const int fh = m.kbPhysical ? SCREEN_H - 34 : (SMALL ? 22 : 38);
   const int maxLines = m.kbPhysical ? (fh - 4) / 17 : (SMALL ? 1 : 2);
-  c.fillRoundRect(fx, fy, fw, fh, 10, SNOW, 185);
+  c.fillRoundRect(fx, fy, fw, fh, 10, SURFACE, 185);
   const char* text = m.kbText.c_str();
   bool blink = (m.timeMs / 500) % 2 == 0;
   if (m.kbText.empty()) {
@@ -593,14 +594,14 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
     bool special = k.action != kb::CHAR;
     uint16_t fg = sel ? USER_TEXT : INK;
     if (sel) {
-      c.fillRoundRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, 8, SNOW, 120);
+      c.fillRoundRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, 8, GLOW, 120);
       c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 245);
     } else if (k.action == kb::SEND) {
       c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 70);
     } else if (k.action == kb::SHIFT && m.kbShift) {
       c.fillRoundRect(r.x, r.y, r.w, r.h, 7, INK, 90);
     } else {
-      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, SNOW, special ? 90 : 140);
+      c.fillRoundRect(r.x, r.y, r.w, r.h, 7, SURFACE, special ? 90 : 140);
     }
     int cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     auto icon = [&](const uint8_t* mask, int w, int h) {
@@ -629,22 +630,38 @@ void drawKeyboard(Canvas& c, const UiModel& m) {
 }  // namespace
 
 // ------------------------------------------------------------ public
+#define W_ rgb(255, 255, 255)
 const ThemeColors kThemes[THEME_COUNT] = {
-    // bgTop               bgBottom            ink               inkSoft
-    // userText            blob                LED
-    {rgb(40, 246, 255), rgb(0, 206, 240), rgb(0, 24, 36), rgb(0, 86, 108),
-     rgb(150, 250, 255), rgb(0, 160, 220), 0, 230, 255},     // neon cyan
-    {rgb(255, 128, 222), rgb(240, 70, 186), rgb(42, 0, 32), rgb(112, 12, 84),
-     rgb(255, 196, 240), rgb(200, 30, 150), 255, 40, 180},   // neon pink
-    {rgb(160, 255, 100), rgb(70, 230, 100), rgb(0, 38, 12), rgb(22, 98, 40),
-     rgb(196, 255, 160), rgb(20, 180, 70), 60, 255, 60},     // neon green
-    {rgb(196, 160, 255), rgb(148, 100, 250), rgb(22, 0, 54), rgb(72, 34, 132),
-     rgb(222, 204, 255), rgb(104, 56, 222), 140, 60, 255},   // violet
-    {rgb(255, 206, 96), rgb(255, 136, 64), rgb(52, 16, 0), rgb(128, 56, 10),
-     rgb(255, 224, 168), rgb(240, 96, 32), 255, 120, 0},     // sunset
-    {rgb(238, 249, 255), rgb(194, 226, 255), rgb(10, 30, 60), rgb(62, 92, 132),
-     rgb(204, 232, 255), rgb(124, 172, 240), 180, 220, 255}, // ice
+    // bgTop, bgBottom, ink, inkSoft, userText, blob, LED r g b, surface, glow
+    {rgb(40, 246, 255), rgb(0, 206, 240), rgb(0, 24, 36), rgb(0, 86, 108),          // neon cyan
+     rgb(150, 250, 255), rgb(0, 160, 220), 0, 230, 255, W_, W_},
+    {rgb(255, 128, 222), rgb(240, 70, 186), rgb(42, 0, 32), rgb(112, 12, 84),       // neon pink
+     rgb(255, 196, 240), rgb(200, 30, 150), 255, 40, 180, W_, W_},
+    {rgb(160, 255, 100), rgb(70, 230, 100), rgb(0, 38, 12), rgb(22, 98, 40),        // neon green
+     rgb(196, 255, 160), rgb(20, 180, 70), 60, 255, 60, W_, W_},
+    {rgb(196, 160, 255), rgb(148, 100, 250), rgb(22, 0, 54), rgb(72, 34, 132),      // violet
+     rgb(222, 204, 255), rgb(104, 56, 222), 140, 60, 255, W_, W_},
+    {rgb(255, 206, 96), rgb(255, 136, 64), rgb(52, 16, 0), rgb(128, 56, 10),        // sunset
+     rgb(255, 224, 168), rgb(240, 96, 32), 255, 120, 0, W_, W_},
+    {rgb(238, 249, 255), rgb(194, 226, 255), rgb(10, 30, 60), rgb(62, 92, 132),     // ice
+     rgb(204, 232, 255), rgb(124, 172, 240), 180, 220, 255, W_, W_},
+    {rgb(255, 118, 96), rgb(232, 44, 64), rgb(44, 0, 6), rgb(120, 10, 24),          // lava
+     rgb(255, 204, 196), rgb(200, 20, 40), 255, 20, 20, W_, W_},
+    {rgb(255, 234, 112), rgb(246, 190, 40), rgb(48, 32, 0), rgb(118, 84, 0),        // gold
+     rgb(255, 242, 176), rgb(230, 160, 0), 255, 180, 0, W_, W_},
+    {rgb(174, 255, 226), rgb(92, 230, 190), rgb(0, 40, 32), rgb(10, 100, 80),       // mint
+     rgb(196, 255, 236), rgb(30, 190, 150), 40, 255, 180, W_, W_},
+    {rgb(96, 176, 255), rgb(42, 112, 242), rgb(0, 16, 50), rgb(10, 46, 112),        // ocean
+     rgb(186, 220, 255), rgb(20, 70, 200), 30, 90, 255, W_, rgb(220, 240, 255)},
+    // dark themes: light text on a dark background
+    {rgb(18, 28, 56), rgb(6, 12, 30), rgb(176, 246, 255), rgb(112, 168, 200),       // midnight
+     rgb(8, 20, 36), rgb(40, 90, 170), 0, 180, 255, rgb(44, 64, 104), rgb(80, 220, 255)},
+    {rgb(6, 26, 12), rgb(0, 8, 4), rgb(124, 255, 144), rgb(64, 170, 84),            // hacker
+     rgb(0, 24, 8), rgb(0, 96, 34), 0, 255, 60, rgb(22, 64, 32), rgb(60, 255, 100)},
+    {rgb(62, 62, 68), rgb(28, 28, 32), rgb(242, 242, 244), rgb(170, 170, 178),      // graphite
+     rgb(22, 22, 26), rgb(96, 96, 104), 255, 255, 255, rgb(88, 88, 96), W_},
 };
+#undef W_
 
 namespace theme {
 uint16_t BG_TOP = kThemes[0].bgTop;
@@ -653,6 +670,8 @@ uint16_t INK = kThemes[0].ink;
 uint16_t INK_SOFT = kThemes[0].inkSoft;
 uint16_t USER_TEXT = kThemes[0].userText;
 uint16_t BLOB = kThemes[0].blob;
+uint16_t SURFACE = kThemes[0].surface;
+uint16_t GLOW = kThemes[0].glow;
 }  // namespace theme
 
 static int g_theme = 0;
@@ -667,6 +686,8 @@ void setTheme(int index) {
   theme::INK_SOFT = t.inkSoft;
   theme::USER_TEXT = t.userText;
   theme::BLOB = t.blob;
+  theme::SURFACE = t.surface;
+  theme::GLOW = t.glow;
   free(g_bgCache);  // repaint the background in the new colours
   g_bgCache = nullptr;
   g_bgFailed = false;
@@ -689,6 +710,11 @@ void setScreenSize(int w, int h) {
   g_bgCache = nullptr;
   g_bgFailed = false;
 }
+
+void drawThemeBackground(Canvas& c) { drawBackground(c); }
+const Font& fontBody() { return font_body; }
+const Font& fontSmall() { return font_small; }
+const Font& fontTitle() { return font_title; }
 
 int chatViewportHeight() { return VIEW_H; }
 
@@ -719,6 +745,10 @@ void render(Canvas& c, const UiModel& m) {
       return;
     case Mode::Setup:
       drawSetup(c, m);
+      if (m.powerHold > 0.f) drawPowerHold(c, m);
+      return;
+    case Mode::Games:
+      games::draw(c, m.uiLang, m.timeMs);
       if (m.powerHold > 0.f) drawPowerHold(c, m);
       return;
     default:

@@ -82,6 +82,10 @@ class Canvas {
 
   void fill(uint16_t c);
   void fillRect(int x, int y, int w, int h, uint16_t c);
+  void fillRect(int x, int y, int w, int h, uint16_t c, uint8_t alpha) {
+    if (alpha == 255) fillRect(x, y, w, h, c);
+    else blendRect(x, y, w, h, c, alpha);
+  }
   void blendRect(int x, int y, int w, int h, uint16_t c, uint8_t alpha);
   void vGradient(int x, int y, int w, int h, uint16_t top, uint16_t bottom);
   void hLine(int x, int y, int w, uint16_t c, uint8_t alpha = 255);

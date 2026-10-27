@@ -10,6 +10,7 @@
 #include "gfx.h"
 #include "i18n.h"
 #include "ui.h"
+#include "games/games.h"
 
 using namespace geist;
 
@@ -129,7 +130,7 @@ static void renderAll(const std::string& out) {
 
   // Colour themes and a renamed assistant
   m.chat.clear(); m.langBadge = "AUTO"; m.assistantName = "Luna";
-  for (int t = 1; t < THEME_COUNT; t++) {
+  for (int t = 1; t < 6; t++) {
     setTheme(t);
     m.mode = Mode::Idle; m.timeMs = 1000;
     if (t == 1) {
@@ -146,6 +147,78 @@ static void renderAll(const std::string& out) {
   m.mode = Mode::Keyboard; m.kbNameMode = true; m.kbText = "Luna"; m.kbIndex = 3;
   shot("15h_name_keyboard");
   m.kbNameMode = false; m.kbText = ""; m.assistantName = "GeistAI";
+  m.mode = Mode::Keyboard; m.kbPage = 3; m.kbText = "Привет"; m.kbIndex = 5;
+  shot("15i_keyboard_cyrillic");
+  m.kbPage = 0; m.kbText = "";
+
+  // Dark themes
+  m.chat = {{true, "Wie wird das Wetter morgen?"}, {false, "Morgen 8 bis 11 Grad mit Schauern, nimm einen Schirm mit."}};
+  m.mode = Mode::Idle; m.timeMs = 1000; m.assistantName = "GeistAI";
+  for (int t = 10; t < THEME_COUNT; t++) {
+    setTheme(t);
+    char name[40];
+    snprintf(name, sizeof(name), "16%c_dark_%d", 'a' + (t - 10), t);
+    shot(name);
+  }
+  setTheme(0);
+  m.chat.clear();
+
+  // Russian menu
+  m.uiLang = UI_RU; m.mode = Mode::Settings; m.settingsIndex = 1; m.settingsEditing = false;
+  m.settings = {{tr(UI_RU, S_GAMES), "\xE2\x80\xBA"}, {tr(UI_RU, S_SPEECH_LANG), "Авто"},
+                {tr(UI_RU, S_UI_LANG), "Русский"}, {tr(UI_RU, S_VOLUME), "70 %"},
+                {tr(UI_RU, S_COLOR), kThemeNames[UI_RU][0]}};
+  shot("16e_settings_ru");
+  m.uiLang = UI_DE;
+
+  // Games: menu and every game after a little play
+  m.mode = Mode::Games;
+  games::begin(7);
+  games::setBestScore(0, 23);
+  games::openMenu();
+  games::key(games::Key::RotR, 0);
+  m.timeMs = 500;
+  shot("17a_games_menu");
+  const games::Key script[][6] = {
+      {games::Key::RotR, games::Key::RotR, games::Key::RotL, games::Key::RotL, games::Key::RotR, games::Key::RotL},
+      {games::Key::Press, games::Key::RotR, games::Key::Press, games::Key::RotR, games::Key::RotR, games::Key::RotR},
+      {games::Key::RotL, games::Key::Press, games::Key::RotR, games::Key::RotR, games::Key::Press, games::Key::LongPress},
+      {games::Key::Left, games::Key::Up, games::Key::Right, games::Key::Down, games::Key::Left, games::Key::Up},
+      {games::Key::PressDown, games::Key::RotR, games::Key::RotR, games::Key::RotL, games::Key::RotR, games::Key::RotR},
+      {games::Key::PressDown, games::Key::PressDown, games::Key::PressDown, games::Key::PressDown, games::Key::PressDown, games::Key::PressDown},
+      {games::Key::Press, games::Key::RotR, games::Key::RotR, games::Key::Press, games::Key::RotR, games::Key::Press},
+      {games::Key::Press, games::Key::RotR, games::Key::RotR, games::Key::RotR, games::Key::LongPress, games::Key::RotR},
+  };
+  for (int g = 0; g < games::COUNT; g++) {
+    uint32_t now = 1000;
+    games::startGame(g, now);
+    m.timeMs = now;
+    char name[40];
+    if (g == 0) {
+      snprintf(name, sizeof(name), "17b_game%d_start", g);
+      shot(name);
+    }
+    games::key(games::Key::Press, now);
+    for (int step = 0; step < 6; step++) {
+      for (int t = 0; t < 40; t++) {
+        now += 16;
+        games::tick(now);
+        if (g == 1 || g == 6) {  // let GeistAI answer
+          now += 400;
+          games::tick(now);
+        }
+        if (g == 5 && t % 18 == 0) games::key(games::Key::PressDown, now);
+      }
+      games::key(script[g][step], now);
+      if (g == 1) {  // chess: a few real moves
+        now += 500;
+        games::tick(now);
+      }
+    }
+    m.timeMs = now;
+    snprintf(name, sizeof(name), "17c_game%d", g);
+    shot(name);
+  }
 
   // Wi-Fi setup hotspot
   m.kbPhysical = false; m.kbText = "";
