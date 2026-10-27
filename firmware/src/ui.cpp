@@ -433,6 +433,55 @@ void drawSettings(Canvas& c, const UiModel& m) {
   }
 }
 
+// ------------------------------------------------------------ voice menu
+void drawVoices(Canvas& c, const UiModel& m) {
+  drawBackground(c);
+  drawIcon(c, 10, 8, icon_speaker_mask, icon_speaker_w, icon_speaker_h, INK);
+  c.drawText(font_title, 30, 3, tr(m.uiLang, S_VOICE), INK);
+  c.hLine(8, TOPBAR_H + 1, SCREEN_W - 16, INK, 40);
+
+  const int rowH = SMALL ? 22 : 24, top = 30;
+  const int bottom = SCREEN_H - font_small.lineHeight - 4;
+  const int visible = (bottom - top) / rowH;
+  int n = (int)m.voiceRows.size();
+  int first = m.voiceIndex - visible / 2;
+  if (first > n - visible) first = n - visible;
+  if (first < 0) first = 0;
+  c.setClip(0, top, SCREEN_W, bottom - top);
+  for (int i = first; i < n && i < first + visible; i++) {
+    int y = top + (i - first) * rowH;
+    const SettingsRow& row = m.voiceRows[i];
+    if (row.section) {
+      c.drawText(font_small, 12, y + rowH - font_small.lineHeight - 2, row.label.c_str(), INK_SOFT);
+      continue;
+    }
+    bool sel = i == m.voiceIndex;
+    uint16_t fg = sel ? USER_TEXT : INK;
+    if (sel) c.fillRoundRect(6, y, SCREEN_W - 12, rowH - 3, 9, INK, 235);
+    int tx = 16;
+    if (i == m.voicePlaying) {  // speaker icon while this voice is speaking
+      drawIcon(c, tx, y + (rowH - 3 - icon_speaker_h) / 2, icon_speaker_mask, icon_speaker_w,
+               icon_speaker_h, fg);
+      tx += icon_speaker_w + 5;
+    }
+    c.drawText(font_body, tx, y + (rowH - 3 - font_body.lineHeight) / 2, row.label.c_str(), fg);
+    if (row.current) {  // the voice in use: a glowing dot
+      float cy = y + (rowH - 3) / 2.f;
+      c.fillCircle(SCREEN_W - 22, cy, 6.f, sel ? USER_TEXT : INK, 60);
+      c.fillCircle(SCREEN_W - 22, cy, 3.5f, sel ? USER_TEXT : INK);
+    } else if (!row.value.empty()) {
+      std::string v = row.value;
+      if (sel && m.voiceEditing) v = "\xE2\x80\xB9 " + v + " \xE2\x80\xBA";
+      c.drawTextRight(font_body, SCREEN_W - 16, y + (rowH - 3 - font_body.lineHeight) / 2,
+                      v.c_str(), fg, sel ? 255 : 200);
+    }
+  }
+  c.resetClip();
+  const char* foot = m.voiceStatus.empty() ? tr(m.uiLang, S_VOICE_HINT) : m.voiceStatus.c_str();
+  c.drawTextCentered(font_small, SCREEN_W / 2, SCREEN_H - font_small.lineHeight - 2, foot,
+                     INK_SOFT);
+}
+
 // ------------------------------------------------------------ power
 void drawPowerIcon(Canvas& c, float cx, float cy, float r, uint16_t col, uint8_t a) {
   // the classic power symbol: a ring open at the top plus a vertical bar
@@ -745,6 +794,10 @@ void render(Canvas& c, const UiModel& m) {
       return;
     case Mode::Setup:
       drawSetup(c, m);
+      if (m.powerHold > 0.f) drawPowerHold(c, m);
+      return;
+    case Mode::Voices:
+      drawVoices(c, m);
       if (m.powerHold > 0.f) drawPowerHold(c, m);
       return;
     case Mode::Games:

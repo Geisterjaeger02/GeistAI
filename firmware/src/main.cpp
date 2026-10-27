@@ -14,6 +14,7 @@
 //    tap while speaking  stop the voice reply and talk again
 // =============================================================================
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
@@ -77,7 +78,8 @@ static std::string assistantName() {
 static Preferences prefs;
 
 // Worker <-> UI signalling
-enum : uint8_t { CMD_TURN = 1, CMD_TEXT, CMD_FIND_SERVER, CMD_RESET };
+enum : uint8_t { CMD_TURN = 1, CMD_TEXT, CMD_FIND_SERVER, CMD_RESET, CMD_VOICES, CMD_VOICE_PLAY,
+                  CMD_VOICE_SET, CMD_SPEED };
 struct Command {
   uint8_t type;
   uint32_t turnId;
@@ -423,6 +425,133 @@ static void runTextTurn(uint32_t id) {
   deliver(id, res, &text);
 }
 
+// ----------------------------------------------------------------------------
+//  Voice menu: pick and preview the server's voices on the device
+// ----------------------------------------------------------------------------
+struct VoiceOpt {
+  std::string id, label;
+  uint8_t engine;  // 0 local (Piper), 1 Microsoft, 2 OpenAI
+};
+static std::vector<VoiceOpt> voiceOpts;    // guarded by ModelLock
+static std::vector<int> voiceRowRef;       // voice row -> index in voiceOpts, -1 otherwise
+static std::string voiceCurrent;           // "engine:name" in use for voiceLang
+static uint8_t voiceLang = 1;              // index into kSpeechLangs (never 0 = auto)
+static uint8_t voiceLangLoaded = 0;
+static int voiceSpeedSel = 1;              // 0 slower, 1 normal, 2 faster
+static int voicePreviewed = -1;            // row that was played last
+static std::string pendingVoice;           // for CMD_VOICE_PLAY / CMD_VOICE_SET
+static int pendingVoiceRow = -1;
+static const float kSpeeds[3] = {1.2f, 1.0f, 0.85f};  // Piper length scale
+enum : int { VROW_LANG = 0, VROW_SPEED = 1 };
+
+static void refreshVoiceRowsLocked() {
+  uint8_t L = settings.uiLang;
+  static const Str speedNames[3] = {S_SPEED_SLOW, S_SPEED_NORMAL, S_SPEED_FAST};
+  static const Str groups[3] = {S_VOICES_LOCAL, S_VOICES_MS, S_VOICES_OPENAI};
+  model.voiceRows.clear();
+  voiceRowRef.clear();
+  model.voiceRows.push_back({tr(L, S_LANGUAGE), kSpeechLangs[voiceLang].label});
+  model.voiceRows.push_back({tr(L, S_SPEED), tr(L, speedNames[voiceSpeedSel])});
+  voiceRowRef = {-1, -1};
+  for (uint8_t g = 0; g < 3; g++) {
+    bool any = false;
+    for (size_t i = 0; i < voiceOpts.size(); i++) {
+      if (voiceOpts[i].engine != g) continue;
+      if (!any) {
+        SettingsRow head{tr(L, groups[g]), ""};
+        head.section = true;
+        model.voiceRows.push_back(head);
+        voiceRowRef.push_back(-1);
+        any = true;
+      }
+      SettingsRow r{voiceOpts[i].label, ""};
+      r.current = voiceOpts[i].id == voiceCurrent;
+      model.voiceRows.push_back(r);
+      voiceRowRef.push_back((int)i);
+    }
+  }
+  if (model.voiceIndex >= (int)model.voiceRows.size()) model.voiceIndex = 0;
+}
+
+// Removes the ♀ ♂ signs (not in the device font) from Microsoft voice names.
+static std::string cleanLabel(std::string s) {
+  for (const char* sym : {" \xE2\x99\x80", " \xE2\x99\x82", "\xE2\x99\x80", "\xE2\x99\x82"}) {
+    size_t p;
+    while ((p = s.find(sym)) != std::string::npos) s.erase(p, strlen(sym));
+  }
+  return s;
+}
+
+static void loadVoices() {
+  std::string lang = kSpeechLangs[voiceLang].code;
+  std::vector<VoiceOpt> opts;
+  std::string current;
+  int speedSel = voiceSpeedSel;
+  bool ok = false;
+  {
+    JsonDocument ov;
+    if (!deserializeJson(ov, net::getText("/api/voices"))) {
+      float sp = ov["speed"] | 1.0f;
+      speedSel = sp > 1.1f ? 0 : (sp < 0.95f ? 2 : 1);
+    }
+  }
+  {
+    JsonDocument doc;
+    std::string body = net::getText("/api/voices/" + lang, 30000);
+    if (!body.empty() && !deserializeJson(doc, body)) {
+      ok = true;
+      current = (const char*)(doc["current"] | "");
+      for (JsonObject o : doc["options"].as<JsonArray>()) {
+        std::string eng = (const char*)(o["engine"] | "piper");
+        opts.push_back({(const char*)(o["id"] | ""), cleanLabel((const char*)(o["label"] | "")),
+                        (uint8_t)(eng == "edge" ? 1 : (eng == "openai" ? 2 : 0))});
+      }
+    }
+  }
+  ModelLock l;
+  voiceOpts = opts;
+  voiceCurrent = current;
+  voiceSpeedSel = speedSel;
+  voiceLangLoaded = voiceLang;
+  voicePreviewed = -1;
+  refreshVoiceRowsLocked();
+  model.voiceStatus = ok ? "" : serverErrorText();
+}
+
+static void playVoice() {
+  std::string lang = kSpeechLangs[voiceLang].code;
+  {
+    ModelLock l;
+    model.voiceStatus = tr(settings.uiLang, S_LOADING);
+    model.voicePlaying = pendingVoiceRow;
+  }
+  playStop = false;
+  bool ok = net::playReply("/api/voices/" + lang + "/preview?voice=" + net::urlEncode(pendingVoice),
+                           &playStop, &speakLevel, 65000);
+  speakLevel = 0.f;
+  ModelLock l;
+  model.voicePlaying = -1;
+  model.voiceStatus = ok ? "" : tr(settings.uiLang, S_VOICE_RETRY);
+  if (ok) voicePreviewed = pendingVoiceRow;
+}
+
+static void setVoice() {
+  std::string lang = kSpeechLangs[voiceLang].code;
+  bool ok = net::postJson("/api/voices/" + lang, "{\"voice\":\"" + pendingVoice + "\"}");
+  ModelLock l;
+  if (ok) voiceCurrent = pendingVoice;
+  refreshVoiceRowsLocked();
+  model.voiceStatus = ok ? tr(settings.uiLang, S_SAVED) : serverErrorText();
+}
+
+static void setSpeed() {
+  char body[32];
+  snprintf(body, sizeof(body), "{\"scale\":%.2f}", kSpeeds[voiceSpeedSel]);
+  bool ok = net::postJson("/api/speed", body);
+  ModelLock l;
+  model.voiceStatus = ok ? tr(settings.uiLang, S_SAVED) : serverErrorText();
+}
+
 static void workerTask(void*) {
   Command cmd;
   for (;;) {
@@ -449,6 +578,18 @@ static void workerTask(void*) {
       case CMD_RESET:
         net::resetConversation();
         break;
+      case CMD_VOICES:
+        loadVoices();
+        break;
+      case CMD_VOICE_PLAY:
+        playVoice();
+        break;
+      case CMD_VOICE_SET:
+        setVoice();
+        break;
+      case CMD_SPEED:
+        setSpeed();
+        break;
     }
     workerBusy = false;
   }
@@ -468,6 +609,7 @@ enum SettingRow : uint8_t {
   ROW_UI_LANG,
   ROW_VOLUME,
   ROW_VOICE,
+  ROW_VOICE_CHOICE,
   ROW_THEME,
   ROW_NAME,
   ROW_AI,
@@ -496,6 +638,7 @@ static void refreshSettingsLocked() {
       {tr(L, S_UI_LANG), kUiLangNames[settings.uiLang]},
       {tr(L, S_VOLUME), vol},
       {tr(L, S_VOICE_REPLY), tr(L, settings.voiceReplies ? S_ON : S_OFF)},
+      {tr(L, S_VOICE), "\xE2\x80\xBA"},
       {tr(L, S_COLOR), kThemeNames[L][settings.theme]},
       {tr(L, S_AI_NAME), assistantName()},
       {tr(L, S_AI_BRAIN), aiValue},
@@ -557,6 +700,86 @@ static void settingsRotate(int delta) {
 static void startSetup();
 static void editName();
 
+static const char* const kUiLangCodes[UI_LANG_COUNT] = {"en", "de", "es", "fr", "it",
+                                                       "pt", "nl", "pl", "tr", "ru"};
+
+static void openVoices() {
+  // start with the language GeistAI speaks right now
+  std::string code = settings.speechLang ? kSpeechLangs[settings.speechLang].code
+                     : !detectedLang.empty() ? detectedLang
+                                             : kUiLangCodes[settings.uiLang];
+  for (uint8_t i = 1; i < kSpeechLangCount; i++)
+    if (code == kSpeechLangs[i].code) voiceLang = i;
+  ModelLock l;
+  model.voiceIndex = 0;
+  model.voiceEditing = false;
+  model.voicePlaying = -1;
+  voiceOpts.clear();
+  refreshVoiceRowsLocked();
+  model.voiceStatus = tr(settings.uiLang, S_LOADING);
+  setModeLocked(Mode::Voices);
+  sendCommand(CMD_VOICES);
+}
+
+static void closeVoices() {
+  playStop = true;
+  ModelLock l;
+  model.voiceEditing = false;
+  refreshSettingsLocked();
+  model.settingsIndex = ROW_VOICE_CHOICE;
+  setModeLocked(Mode::Settings);
+}
+
+static void voicesRotate(int delta) {
+  ModelLock l;
+  if (model.voiceEditing && model.voiceIndex == VROW_LANG) {
+    int n = kSpeechLangCount - 1;  // without "auto"
+    voiceLang = 1 + ((voiceLang - 1 + (delta > 0 ? 1 : -1)) % n + n) % n;
+  } else if (model.voiceEditing && model.voiceIndex == VROW_SPEED) {
+    int v = voiceSpeedSel + (delta > 0 ? 1 : -1);
+    voiceSpeedSel = v < 0 ? 0 : (v > 2 ? 2 : v);
+  } else {
+    int n = (int)model.voiceRows.size(), i = model.voiceIndex, step = delta > 0 ? 1 : -1;
+    for (int k = 0; k < (delta > 0 ? delta : -delta); k++) {
+      int j = i + step;
+      while (j >= 0 && j < n && model.voiceRows[j].section) j += step;  // skip headings
+      if (j >= 0 && j < n) i = j;
+    }
+    model.voiceIndex = i;
+  }
+  refreshVoiceRowsLocked();
+}
+
+static void voicesClick() {
+  ModelLock l;
+  int i = model.voiceIndex;
+  if (i == VROW_LANG || i == VROW_SPEED) {
+    model.voiceEditing = !model.voiceEditing;
+    if (!model.voiceEditing) {
+      if (i == VROW_LANG && voiceLang != voiceLangLoaded) {
+        voiceOpts.clear();
+        refreshVoiceRowsLocked();
+        model.voiceStatus = tr(settings.uiLang, S_LOADING);
+        sendCommand(CMD_VOICES);
+      }
+      if (i == VROW_SPEED) sendCommand(CMD_SPEED);
+    }
+    return;
+  }
+  if (i < 0 || i >= (int)voiceRowRef.size() || voiceRowRef[i] < 0) return;
+  if (model.voicePlaying == i) {  // pressed while it speaks: stop
+    playStop = true;
+    return;
+  }
+  pendingVoice = voiceOpts[voiceRowRef[i]].id;
+  pendingVoiceRow = i;
+  if (voicePreviewed == i || pendingVoice == voiceCurrent) {
+    sendCommand(CMD_VOICE_SET);  // second press: use this voice
+  } else {
+    sendCommand(CMD_VOICE_PLAY);  // first press: listen
+  }
+}
+
 static void openGames() {
   saveSettings();
   games::openMenu();
@@ -565,7 +788,7 @@ static void openGames() {
 }
 
 static void settingsClick() {
-  bool close = false, setup = false, name = false, play = false;
+  bool close = false, setup = false, name = false, play = false, voices = false;
   {
     ModelLock l;
     switch (model.settingsIndex) {
@@ -580,6 +803,9 @@ static void settingsClick() {
         break;
       case ROW_GAMES:
         play = true;
+        break;
+      case ROW_VOICE_CHOICE:
+        voices = true;
         break;
       case ROW_AI:
         settings.cloud = !settings.cloud;
@@ -609,6 +835,7 @@ static void settingsClick() {
   if (close) closeSettings();
   if (name) editName();
   if (play) openGames();
+  if (voices) openVoices();
   if (setup) {
     saveSettings();
     startSetup();
@@ -810,6 +1037,7 @@ static void onButtonDown(const input::Event& ev) {
       return;
     case Mode::Settings:
     case Mode::Setup:
+    case Mode::Voices:
       return;  // handled on release
     case Mode::Keyboard:
       // decided later: a tap types the key, holding switches to talking
@@ -871,6 +1099,11 @@ static void onButtonUp(const input::Event& ev) {
     if (!setupSavedAt) cancelSetup();
     return;
   }
+  if (m == Mode::Voices) {
+    if (ev.heldMs >= 700) closeVoices();
+    else voicesClick();
+    return;
+  }
   if (m == Mode::Settings) {
     if (ev.heldMs >= 700)
       closeSettings();  // long press leaves the menu
@@ -922,6 +1155,8 @@ static void onEnter() {
     settingsClick();
   } else if (m == Mode::Setup) {
     if (!setupSavedAt) cancelSetup();
+  } else if (m == Mode::Voices) {
+    voicesClick();
   } else if (m == Mode::Error) {
     setMode(Mode::Idle);
   }
@@ -937,6 +1172,8 @@ static void onEscape() {
   Mode m = currentMode();
   if (m == Mode::Settings)
     closeSettings();
+  else if (m == Mode::Voices)
+    closeVoices();
   else if (m == Mode::Setup && !setupSavedAt)
     cancelSetup();
   else if (m == Mode::Keyboard && model.kbNameMode) {
@@ -965,6 +1202,7 @@ static void updateHold(uint32_t now) {
 static void onRotate(int delta) {
   Mode m = currentMode();
   if (m == Mode::Settings) return settingsRotate(delta);
+  if (m == Mode::Voices) return voicesRotate(delta);
   if (m == Mode::Boot || m == Mode::Listening || m == Mode::Setup) return;
   ModelLock l;
   if (m == Mode::Keyboard) {
@@ -1079,6 +1317,8 @@ static void handleInput() {
         } else if (currentMode() == Mode::Keyboard && model.kbNameMode) {
           ModelLock l;
           finishNameLocked(false);
+        } else if (currentMode() == Mode::Voices) {
+          closeVoices();
         } else if (currentMode() == Mode::Games) {
           leaveGamesIfDone(games::backPressed(millis()));
         } else if (currentMode() != Mode::Boot) {

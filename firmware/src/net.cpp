@@ -25,7 +25,7 @@ void noteHttpError(int code) {
   Serial.printf("[net] request to %s failed: %s\n", g_server.c_str(), g_lastError.c_str());
 }
 
-std::string urlEncode(const char* s) {
+std::string urlEncodeC(const char* s) {
   static const char* hex = "0123456789ABCDEF";
   std::string out;
   for (; *s; s++) {
@@ -65,7 +65,7 @@ bool readExact(WiFiClient* s, uint8_t* dst, size_t n, uint32_t timeoutMs = 5000)
 std::string assistantParams() {
   std::string p;
   if (g_useCloud) p += "&ai=cloud";
-  if (!g_name.empty()) p += "&name=" + urlEncode(g_name.c_str());
+  if (!g_name.empty()) p += "&name=" + urlEncodeC(g_name.c_str());
   return p;
 }
 
@@ -178,6 +178,32 @@ bool healthCheck() {
 
 bool cloudAvailable() { return g_cloudReady; }
 
+std::string urlEncode(const std::string& s) { return urlEncodeC(s.c_str()); }
+
+std::string getText(const std::string& path, uint16_t timeoutMs) {
+  if (g_server.empty() || !wifiConnected()) return "";
+  HTTPClient http;
+  http.setTimeout(timeoutMs);
+  if (!http.begin((g_server + path).c_str())) return "";
+  int code = http.GET();
+  std::string body = code == 200 ? std::string(http.getString().c_str()) : std::string();
+  if (code != 200) noteHttpError(code);
+  http.end();
+  return body;
+}
+
+bool postJson(const std::string& path, const std::string& json) {
+  if (g_server.empty() || !wifiConnected()) return false;
+  HTTPClient http;
+  http.setTimeout(15000);
+  if (!http.begin((g_server + path).c_str())) return false;
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST((uint8_t*)json.data(), json.size());
+  http.end();
+  if (code != 200) noteHttpError(code);
+  return code == 200;
+}
+
 void setAssistant(bool useCloud, const std::string& name) {
   g_useCloud = useCloud;
   g_name = name;
@@ -265,7 +291,7 @@ bool streamBegin(const char* lang, bool wantVoice) {
     return false;
   }
   g_stream.setNoDelay(true);
-  std::string req = "POST /api/chat?device=" + deviceId() + "&lang=" + urlEncode(lang) +
+  std::string req = "POST /api/chat?device=" + deviceId() + "&lang=" + urlEncodeC(lang) +
                     "&tts=" + (wantVoice ? "1" : "0") + assistantParams() +
                     " HTTP/1.1\r\nHost: " + host + ":" +
                     std::to_string(port) +
@@ -343,7 +369,7 @@ static ChatResult postChat(const char* path, const char* contentType, const uint
     return res;
   }
 
-  std::string url = g_server + path + "?device=" + deviceId() + "&lang=" + urlEncode(lang) +
+  std::string url = g_server + path + "?device=" + deviceId() + "&lang=" + urlEncodeC(lang) +
                     "&tts=" + (wantVoice ? "1" : "0") + assistantParams();
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
@@ -393,10 +419,11 @@ bool resetConversation() {
 }
 
 // ---------------------------------------------------------------- playback
-bool playReply(const std::string& path, volatile bool* stop, volatile float* level) {
+bool playReply(const std::string& path, volatile bool* stop, volatile float* level,
+               uint16_t timeoutMs) {
   if (path.empty() || g_server.empty()) return false;
   HTTPClient http;
-  http.setTimeout(10000);
+  http.setTimeout(timeoutMs);
   if (!http.begin((g_server + path).c_str())) return false;
   int code = http.GET();
   if (code != 200) {

@@ -171,6 +171,20 @@ static void renderAll(const std::string& out) {
   shot("16e_settings_ru");
   m.uiLang = UI_DE;
 
+  // Voice menu
+  m.mode = Mode::Voices; m.uiLang = UI_DE;
+  {
+    auto sec = [](const char* t) { SettingsRow r{t, ""}; r.section = true; return r; };
+    SettingsRow cur{"Thorsten · medium · Germany", ""};
+    cur.current = true;
+    m.voiceRows = {{tr(UI_DE, S_LANGUAGE), "Deutsch"}, {tr(UI_DE, S_SPEED), tr(UI_DE, S_SPEED_NORMAL)},
+                   sec(tr(UI_DE, S_VOICES_LOCAL)), cur, {"Thorsten · high · Germany", ""},
+                   {"Kerstin · low · Germany", ""}, sec(tr(UI_DE, S_VOICES_MS)),
+                   {"SeraphinaMultilingual · de-DE", ""}, {"Conrad · de-DE", ""}};
+  }
+  m.voiceIndex = 7; m.voicePlaying = 7; m.voiceStatus = "";
+  shot("16f_voices");
+
   // Games: menu and every game after a little play
   m.mode = Mode::Games;
   games::begin(7);

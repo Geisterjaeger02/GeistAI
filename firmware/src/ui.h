@@ -46,7 +46,7 @@ extern int SCREEN_H;
 void setScreenSize(int w, int h);
 
 enum class Mode : uint8_t {
-  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard, Setup, Games
+  Boot, Idle, Listening, Thinking, Speaking, Error, Settings, Off, Keyboard, Setup, Games, Voices
 };
 
 struct ChatMsg {
@@ -57,6 +57,8 @@ struct ChatMsg {
 struct SettingsRow {
   std::string label;
   std::string value;  // empty for action rows
+  bool section = false;  // a small heading between rows (not selectable)
+  bool current = false;  // shows a check mark (e.g. the voice in use)
 };
 
 struct UiModel {
@@ -103,6 +105,13 @@ struct UiModel {
   bool kbShift = false;
   bool kbPhysical = false;  // device has a real keyboard (Cardputer): no on-screen keys
   bool kbNameMode = false;  // editing the assistant's name instead of a message
+
+  // voice menu (rows like the settings)
+  std::vector<SettingsRow> voiceRows;
+  int voiceIndex = 0;
+  bool voiceEditing = false;
+  int voicePlaying = -1;     // row being previewed
+  std::string voiceStatus;   // "Loading…", "Saved!" ...
 
   // Wi-Fi setup hotspot
   std::string setupSsid;

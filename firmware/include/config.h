@@ -1,7 +1,7 @@
 // GeistAI - tunables. Wi-Fi + server are set up from the web flasher, the setup hotspot or secrets.h.
 #pragma once
 
-#define GEIST_VERSION "v0.3.0"
+#define GEIST_VERSION "v0.3.1"
 
 // ---------------------------------------------------------------- audio
 #define MIC_SAMPLE_RATE 16000      // what the speech server expects

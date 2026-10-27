@@ -55,7 +55,13 @@ ChatResult sendText(const std::string& text, const char* lang, bool wantVoice);
 
 // Streams a WAV reply to the speaker. Returns false on network error.
 // `stop` aborts playback, `level` receives the current loudness 0..1.
-bool playReply(const std::string& path, volatile bool* stop, volatile float* level);
+bool playReply(const std::string& path, volatile bool* stop, volatile float* level,
+               uint16_t timeoutMs = 10000);
+
+// Small JSON helpers for the voice menu. getText returns the body ("" on error).
+std::string getText(const std::string& path, uint16_t timeoutMs = 15000);
+bool postJson(const std::string& path, const std::string& json);
+std::string urlEncode(const std::string& s);
 
 bool resetConversation();
 

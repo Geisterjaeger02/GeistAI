@@ -156,7 +156,7 @@ class Catalog:
             if not loc.lower().startswith(prefix.lower()):
                 continue
             short = v.get("ShortName", "")
-            nice = short.split("-", 2)[-1].replace("Neural", "")
+            nice = short.split("-", 2)[-1].replace("Neural", "").replace("Multilingual", " multi")
             gender = {"Female": "♀", "Male": "♂"}.get(v.get("Gender", ""), "")
             out.append({"id": f"edge:{short}", "engine": "edge",
                         "label": f"{nice} · {loc} {gender}".strip()})

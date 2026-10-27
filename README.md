@@ -128,7 +128,8 @@ Wikipedia, or nothing). The server fetches it and the model answers from it, in 
 Only the search words and the place name leave your network, never your voice. `INTERNET=0`
 switches it off.
 
-**Voices:** open <http://localhost:8765/voices> (or `http://<pc-ip>:8765/voices` from your phone)
+**Voices:** on the device, Settings → **Voice**: choose the language, press a voice to hear it,
+press again to use it. Or open <http://localhost:8765/voices> (or `http://<pc-ip>:8765/voices` from your phone)
 to pick the voice for each language and listen to it first. There are three kinds:
 - **Local (Piper):** free and offline, every Piper voice (each downloads the first time you
   listen, about 60 MB).
