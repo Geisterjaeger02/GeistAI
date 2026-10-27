@@ -80,6 +80,7 @@ OLD_DEFAULT_LANGUAGES = "de,en,es,fr,it,pt,nl,pl,tr"
 
 @dataclass
 class Config:
+    env_file: Path = Path(".env")      # where the voice page saves its choices
     host: str = "0.0.0.0"
     port: int = 8765
     announce_mdns: bool = True
@@ -107,6 +108,7 @@ class Config:
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
     openai_url: str = "https://api.openai.com"
+    openai_tts_model: str = "gpt-4o-mini-tts"  # for OpenAI voices
     history_turns: int = 6
     assistant_name: str = "GeistAI"
     timezone: str = "Europe/Berlin"
@@ -127,6 +129,7 @@ class Config:
     def from_env(cls) -> "Config":
         _load_dotenv(Path.cwd() / ".env")
         cfg = cls()
+        cfg.env_file = Path.cwd() / ".env"
         cfg.host = _env("GEIST_HOST", cfg.host)
         cfg.port = _env_int("GEIST_PORT", cfg.port)
         cfg.announce_mdns = _env("GEIST_MDNS", "1") not in ("0", "false", "no")
@@ -149,6 +152,7 @@ class Config:
         cfg.openai_api_key = _env("OPENAI_API_KEY", cfg.openai_api_key).strip()
         cfg.openai_model = _env("OPENAI_MODEL", cfg.openai_model).strip() or cfg.openai_model
         cfg.openai_url = _env("OPENAI_URL", cfg.openai_url).rstrip("/")
+        cfg.openai_tts_model = _env("OPENAI_TTS_MODEL", cfg.openai_tts_model)
         cfg.history_turns = _env_int("HISTORY_TURNS", cfg.history_turns)
         cfg.assistant_name = _env("ASSISTANT_NAME", cfg.assistant_name)
         cfg.timezone = _env("GEIST_TIMEZONE", cfg.timezone)

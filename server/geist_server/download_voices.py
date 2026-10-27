@@ -42,8 +42,13 @@ def main(argv: list[str]) -> int:
     cfg = Config.from_env()
     langs = argv or sorted(cfg.voices)
     ok = True
+    from .voices import parse
+
     for lang in langs:
-        name = cfg.voices.get(lang)
+        engine, name = parse(cfg.voices.get(lang, ""))
+        if engine != "piper":
+            print(f"{lang}: {engine} voice {name} (online, nothing to download)")
+            continue
         if not name:
             print(f"{lang}: no voice configured (set VOICE_{lang.upper()}=<piper voice name>)")
             ok = False

@@ -53,6 +53,23 @@ class AppTests(unittest.TestCase):
         r = self.client.post("/api/text?lang=auto", json={"text": "Hola, ¿qué tal?"})
         self.assertEqual(r.json()["language"], "es")
 
+    def test_voice_choice_is_saved(self):
+        import tempfile
+        from pathlib import Path
+
+        cfg = self.client.app.state.cfg
+        cfg.env_file = Path(tempfile.mkdtemp()) / ".env"
+        self.assertIn("GeistAI", self.client.get("/voices").text)
+        r = self.client.post("/api/voices/de", json={"voice": "edge:de-DE-KatjaNeural"})
+        self.assertTrue(r.json()["ok"])
+        self.assertEqual(cfg.voices["de"], "edge:de-DE-KatjaNeural")
+        self.assertIn("VOICE_DE=edge:de-DE-KatjaNeural", cfg.env_file.read_text())
+        r = self.client.post("/api/voices/de", json={"voice": "piper:de_DE-thorsten-high"})
+        self.assertEqual(cfg.voices["de"], "de_DE-thorsten-high")
+        self.assertEqual(cfg.env_file.read_text().count("VOICE_DE="), 1)
+        self.client.post("/api/speed", json={"scale": 0.85})
+        self.assertIn("TTS_LENGTH_SCALE=0.85", cfg.env_file.read_text())
+
     def test_assistant_options(self):
         r = self.client.post("/api/text?lang=de&ai=cloud&name=Luna", json={"text": "Hallo"})
         self.assertEqual(r.json()["ai"], "cloud")

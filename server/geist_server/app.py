@@ -29,6 +29,14 @@ class TextIn(BaseModel):
     text: str
 
 
+class VoiceIn(BaseModel):
+    voice: str
+
+
+class SpeedIn(BaseModel):
+    scale: float
+
+
 def lan_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -130,6 +138,60 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
             raise HTTPException(404, "expired")
         return Response(content=data, media_type="audio/wav")
 
+    # ---------------------------------------------------------------- voices
+    from .firstrun import set_env
+    from .textutil import LANGUAGE_NAMES
+    from .voices import Catalog, parse, sample_text
+
+    catalog = Catalog(cfg)
+
+    @app.get("/voices", response_class=HTMLResponse)
+    def voices_page():
+        return VOICES_PAGE
+
+    @app.get("/api/voices")
+    def voices_overview():
+        tts = assistant.tts
+        langs = list(dict.fromkeys(["de", "en"] + list(cfg.allowed_languages or cfg.voices)))
+        return {
+            "speed": cfg.tts_length_scale,
+            "openai": bool(cfg.openai_api_key),
+            "languages": [{"code": lang, "name": LANGUAGE_NAMES.get(lang, lang),
+                           "current": tts.voice_id(lang) if hasattr(tts, "voice_id") else ""}
+                          for lang in langs],
+        }
+
+    @app.get("/api/voices/{lang}")
+    def voice_options(lang: str):
+        current = assistant.tts.voice_id(lang) if hasattr(assistant.tts, "voice_id") else ""
+        cur_engine, cur_name = parse(current)
+        return {"current": f"{cur_engine}:{cur_name}", "options": catalog.options(lang)}
+
+    @app.get("/api/voices/{lang}/preview")
+    def voice_preview(lang: str, voice: str):
+        wav = assistant.tts.synthesize(sample_text(lang, cfg.assistant_name), lang, voice=voice,
+                                       wait_s=240)
+        if not wav:
+            raise HTTPException(503, "this voice could not speak")
+        return Response(content=wav, media_type="audio/wav")
+
+    @app.post("/api/voices/{lang}")
+    def voice_select(lang: str, body: VoiceIn):
+        engine, name = parse(body.voice)
+        if not name:
+            raise HTTPException(400, "no voice")
+        value = name if engine == "piper" else f"{engine}:{name}"
+        cfg.voices[lang] = value
+        set_env(cfg.env_file, f"VOICE_{lang.upper()}", value)
+        log.info("voice for %s is now %s", lang, value)
+        return {"ok": True, "voice": value}
+
+    @app.post("/api/speed")
+    def speed_select(body: SpeedIn):
+        cfg.tts_length_scale = min(2.0, max(0.5, body.scale))
+        set_env(cfg.env_file, "TTS_LENGTH_SCALE", f"{cfg.tts_length_scale:g}")
+        return {"ok": True, "scale": cfg.tts_length_scale}
+
     @app.get("/", response_class=HTMLResponse)
     def index():
         return STATUS_PAGE.replace("{{version}}", __version__).replace(
@@ -183,6 +245,7 @@ button{margin-top:8px;background:#001824;color:#96faff;border:0;border-radius:99
 </style></head><body><main>
 <h1>GeistAI</h1>
 <p>Server <b>{{version}}</b> is running. Speech: <code>whisper {{stt}}</code> &middot; LLM: <code>{{llm}}</code></p>
+<p><a href="/voices">Choose the voices &rarr;</a></p>
 <p>Try it without the device (text in any language):</p>
 <textarea id="q" rows="2">Hallo! Wer bist du?</textarea>
 <button onclick="ask()">Ask</button>
@@ -195,4 +258,119 @@ async function ask(){
   const j=await r.json(); out.textContent=j.ok?j.reply:('Error: '+j.error);
   if(j.audio){new Audio(j.audio).play();}
 }
+</script></main></body></html>"""
+
+
+VOICES_PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>GeistAI voices</title>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;min-height:100vh;font-family:Inter,system-ui,sans-serif;background:linear-gradient(#28f6ff,#00cef0) fixed;color:#001824}
+main{max-width:640px;margin:0 auto;padding:24px 16px 60px}
+h1{font-family:'Dancing Script',cursive;font-size:52px;margin:0}
+h2{font-size:18px;margin:26px 0 8px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,button{font:inherit;border:0;border-radius:999px;padding:8px 14px;cursor:pointer}
+select{background:#ffffffcc}
+.seg button{background:#ffffff80;color:#001824}.seg button.on{background:#001824;color:#96faff}
+.group{background:#ffffff8c;border-radius:16px;padding:6px 14px;margin-top:12px}
+.group h3{font-size:15px;margin:10px 0 2px}.group p{margin:0 0 6px;font-size:13px;color:#00566c}
+.row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #00182412}
+.row span{flex:1}.row .meta{font-size:12px;color:#00566c}
+.play{background:#ffffffcc;width:38px;height:34px;padding:0}
+.pick{background:#001824;color:#96faff}.cur{font-weight:600;color:#00566c;padding:0 8px}
+#msg{min-height:20px;margin-top:10px;font-size:14px}
+a{color:#001824}
+</style></head><body><main>
+<h1>GeistAI</h1>
+<div id="t-title" style="font-size:20px;font-weight:600"></div>
+<h2 id="t-lang"></h2>
+<div class="bar"><select id="lang"></select></div>
+<h2 id="t-speed"></h2>
+<div class="bar seg" id="speed"></div>
+<div id="msg"></div>
+<div id="list"></div>
+<p style="margin-top:30px"><a href="/">&larr; GeistAI</a></p>
+<script>
+const de = (navigator.language||'').startsWith('de');
+const T = de ? {
+  title:'Stimmen', lang:'Sprache', speed:'Sprechtempo', speeds:['Langsamer','Normal','Schneller'],
+  piper:'Lokal', piperNote:'Kostenlos, läuft auf deinem PC, ohne Internet. Neue Stimmen werden beim ersten Anhören geladen (ca. 60 MB).',
+  edge:'Microsoft (natürlich klingend)', edgeNote:'Kostenlos, braucht Internet. Der Antworttext geht an Microsoft.',
+  openai:'OpenAI', openaiNote:'Braucht deinen OpenAI-Schlüssel und kostet ein wenig pro Antwort.',
+  pick:'Nehmen', current:'aktiv', loading:'Lade …', saved:'Gespeichert! Ab der nächsten Antwort spricht GeistAI so.',
+  failed:'Diese Stimme konnte nicht sprechen.', installed:'installiert'
+} : {
+  title:'Voices', lang:'Language', speed:'Speaking speed', speeds:['Slower','Normal','Faster'],
+  piper:'Local', piperNote:'Free, runs on your PC, works offline. New voices download the first time you listen (about 60 MB).',
+  edge:'Microsoft (natural sounding)', edgeNote:'Free, needs internet. The answer text is sent to Microsoft.',
+  openai:'OpenAI', openaiNote:'Needs your OpenAI key and costs a little per answer.',
+  pick:'Use', current:'active', loading:'Loading …', saved:'Saved! GeistAI uses this voice from the next answer on.',
+  failed:'This voice could not speak.', installed:'installed'
+};
+for (const k of ['title','lang','speed']) document.getElementById('t-'+k).textContent = T[k];
+const msg = t => document.getElementById('msg').textContent = t || '';
+let overview, audio;
+
+async function load() {
+  overview = await (await fetch('/api/voices')).json();
+  const sel = document.getElementById('lang');
+  for (const l of overview.languages) {
+    const o = document.createElement('option'); o.value = l.code; o.textContent = l.name; sel.appendChild(o);
+  }
+  sel.onchange = () => showLang(sel.value);
+  const sp = document.getElementById('speed');
+  [1.2, 1.0, 0.85].forEach((v, i) => {
+    const b = document.createElement('button'); b.textContent = T.speeds[i];
+    b.className = Math.abs(overview.speed - v) < 0.01 ? 'on' : '';
+    b.onclick = async () => {
+      await fetch('/api/speed', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scale:v})});
+      overview.speed = v; [...sp.children].forEach(c => c.className = ''); b.className = 'on'; msg(T.saved);
+    };
+    sp.appendChild(b);
+  });
+  showLang(sel.value);
+}
+
+async function showLang(lang) {
+  const list = document.getElementById('list'); list.textContent = ''; msg(T.loading);
+  const data = await (await fetch('/api/voices/' + lang)).json(); msg('');
+  for (const eng of ['piper', 'edge', 'openai']) {
+    const opts = data.options.filter(o => o.engine === eng);
+    if (!opts.length) continue;
+    const g = document.createElement('div'); g.className = 'group';
+    const h = document.createElement('h3'); h.textContent = T[eng]; g.appendChild(h);
+    const p = document.createElement('p'); p.textContent = T[eng + 'Note']; g.appendChild(p);
+    for (const o of opts) {
+      const r = document.createElement('div'); r.className = 'row';
+      const play = document.createElement('button'); play.className = 'play'; play.textContent = '\u25B6';
+      play.title = 'Play';
+      play.onclick = async () => {
+        if (audio) audio.pause();
+        play.textContent = '\u2026'; msg(T.loading);
+        const res = await fetch('/api/voices/' + lang + '/preview?voice=' + encodeURIComponent(o.id));
+        play.textContent = '\u25B6';
+        if (!res.ok) { msg(T.failed); return; }
+        msg(''); audio = new Audio(URL.createObjectURL(await res.blob())); audio.play();
+      };
+      const label = document.createElement('span'); label.textContent = o.label;
+      if (o.installed) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = ' \u00b7 ' + T.installed; label.appendChild(m); }
+      r.append(play, label);
+      if (o.id === data.current) {
+        const c = document.createElement('span'); c.className = 'cur'; c.textContent = '\u2713 ' + T.current; c.style.flex = '0';
+        r.appendChild(c);
+      } else {
+        const pick = document.createElement('button'); pick.className = 'pick'; pick.textContent = T.pick;
+        pick.onclick = async () => {
+          const res = await fetch('/api/voices/' + lang, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({voice:o.id})});
+          if (res.ok) { await showLang(lang); msg(T.saved); }
+        };
+        r.appendChild(pick);
+      }
+      g.appendChild(r);
+    }
+    list.appendChild(g);
+  }
+}
+load();
 </script></main></body></html>"""

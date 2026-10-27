@@ -8,3 +8,4 @@ zeroconf>=0.132
 ddgs>=9.5            # web + news search (DuckDuckGo), no API key
 num2words>=0.5.13    # years spoken as years (neunzehnhundertsechsunddreißig)
 anyascii>=0.3.2      # shows Chinese, Arabic, Hindi ... in Latin letters on the screen
+edge-tts>=7.0        # optional natural Microsoft voices (choose them on the voice page)

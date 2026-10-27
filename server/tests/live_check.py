@@ -57,6 +57,34 @@ def check_voices() -> None:
         print("::notice title=voices::" + text.replace("%", "%25").replace("\n", "%0A"))
 
 
+def check_voice_engines() -> None:
+    """Voice lists and a Microsoft voice end to end (MP3 -> WAV)."""
+    import tempfile
+    from pathlib import Path
+
+    from geist_server.config import Config
+    from geist_server.tts import TTS
+    from geist_server.voices import Catalog
+
+    cfg = Config()
+    cfg.voices_dir = Path(tempfile.mkdtemp())
+    cat = Catalog(cfg)
+    lines = [f"piper de: {len(cat.piper_voices('de'))} voices, e.g. "
+             + ", ".join(v["label"] for v in cat.piper_voices("de")[:6]),
+             f"edge de: {len(cat.edge_voices('de'))} voices, e.g. "
+             + ", ".join(v["label"] for v in cat.edge_voices("de")[:6])]
+    try:
+        wav = TTS(cfg)._edge("Hallo, ich bin GeistAI.", "de-DE-KatjaNeural")
+        lines.append(f"edge speak: {len(wav)} bytes WAV, header {wav[:4]!r}")
+    except Exception as e:
+        lines.append(f"edge speak FAILED: {type(e).__name__}: {e}")
+    text = "\n".join(lines)
+    print(text)
+    if os.environ.get("GITHUB_ACTIONS"):
+        print("::notice title=voice engines::" + text.replace("%", "%25").replace("\n", "%0A"))
+
+
 if __name__ == "__main__":
     check_voices()
+    check_voice_engines()
     main()
