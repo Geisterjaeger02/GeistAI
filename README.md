@@ -128,6 +128,17 @@ Wikipedia, or nothing). The server fetches it and the model answers from it, in 
 Only the search words and the place name leave your network, never your voice. `INTERNET=0`
 switches it off.
 
+**Voices:** open <http://localhost:8765/voices> (or `http://<pc-ip>:8765/voices` from your phone)
+to pick the voice for each language and listen to it first. There are three kinds:
+- **Local (Piper):** free and offline, every Piper voice (each downloads the first time you
+  listen, about 60 MB).
+- **Microsoft:** the natural online voices from Edge's "read aloud". Free, but needs internet,
+  and the answer text goes to Microsoft.
+- **OpenAI:** needs the API key and costs a little per answer.
+
+The speaking speed is set on the same page. If an online voice fails, the local voice speaks
+instead.
+
 **ChatGPT (optional):** paste an [OpenAI API key](https://platform.openai.com/api-keys) when the
 setup asks for it (or set `OPENAI_API_KEY` in `.env`). Then choose **Settings → AI model →
 ChatGPT** on the device. Speech recognition and the voice stay on your PC; only the text of your

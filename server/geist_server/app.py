@@ -69,6 +69,7 @@ def create_app(cfg: Config | None = None, assistant: Assistant | None = None) ->
                      cfg.home_location or "not set - add HOME_LOCATION=<your town> to .env")
         else:
             log.info("internet lookups off (INTERNET=0)")
+        log.info("choose the voices: http://%s:%d/voices", lan_ip(), cfg.port)
         if cfg.openai_api_key:
             log.info("ChatGPT available (%s) - choose it on the device: Settings -> AI model",
                      cfg.openai_model)
@@ -278,7 +279,8 @@ select{background:#ffffffcc}
 .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #00182412}
 .row span{flex:1}.row .meta{font-size:12px;color:#00566c}
 .play{background:#ffffffcc;width:38px;height:34px;padding:0}
-.pick{background:#001824;color:#96faff}.cur{font-weight:600;color:#00566c;padding:0 8px}
+.pick{background:#001824;color:#96faff}.cur{font-weight:600;color:#00566c;padding:0 8px;white-space:nowrap}
+html{background:#00cef0}
 #msg{min-height:20px;margin-top:10px;font-size:14px}
 a{color:#001824}
 </style></head><body><main>
